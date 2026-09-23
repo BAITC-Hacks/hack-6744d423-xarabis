@@ -3,25 +3,31 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from city_simulator.core.config import get_settings
 from city_simulator.domain.exceptions import (
+    ConsultantServiceError,
     ScenarioNotFoundError,
     ScenarioValidationError,
     ScenarioVersionConflictError,
     SimulationResultNotFoundError,
 )
 from city_simulator.infrastructure.database import dispose_engine
-from city_simulator.presentation.dependencies import get_repository
+from city_simulator.presentation.chat_routes import router as chat_router
+from city_simulator.presentation.dependencies import close_consultant_gateway, get_repository
 from city_simulator.presentation.routes import router
 from city_simulator.presentation.scenario_routes import router as scenario_router
 
 
 @asynccontextmanager
 async def lifespan(_application: FastAPI):
-    yield
-    await dispose_engine()
+    try:
+        yield
+    finally:
+        await close_consultant_gateway()
+        await dispose_engine()
 
 
 def create_app() -> FastAPI:
@@ -30,11 +36,19 @@ def create_app() -> FastAPI:
     get_repository().get_dataset()
     application = FastAPI(
         title=settings.app_name,
-        version="0.3.0",
+        version="0.5.0",
         description="API симулятора управления районами Астаны.",
         debug=settings.app_debug,
         lifespan=lifespan,
     )
+    if settings.allowed_origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.allowed_origins,
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @application.exception_handler(ScenarioValidationError)
     async def scenario_validation_handler(
@@ -47,7 +61,14 @@ def create_app() -> FastAPI:
                 "error": {
                     "code": "scenario_validation_error",
                     "message": "Сценарий нарушает игровые правила",
-                    "details": exc.errors,
+                    "details": [
+                        {
+                            "code": issue.code,
+                            "message": issue.message,
+                            "context": issue.context,
+                        }
+                        for issue in exc.issues
+                    ],
                 }
             },
         )
@@ -75,7 +96,13 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=404,
-            content={"error": {"code": "scenario_not_found", "message": str(exc)}},
+            content={
+                "error": {
+                    "code": "scenario_not_found",
+                    "message": str(exc),
+                    "details": {"scenario_id": str(exc.scenario_id)},
+                }
+            },
         )
 
     @application.exception_handler(SimulationResultNotFoundError)
@@ -85,7 +112,13 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=404,
-            content={"error": {"code": "result_not_found", "message": str(exc)}},
+            content={
+                "error": {
+                    "code": "result_not_found",
+                    "message": str(exc),
+                    "details": {"scenario_id": str(exc.scenario_id)},
+                }
+            },
         )
 
     @application.exception_handler(ScenarioVersionConflictError)
@@ -95,7 +128,39 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=409,
-            content={"error": {"code": "scenario_version_conflict", "message": str(exc)}},
+            content={
+                "error": {
+                    "code": "scenario_version_conflict",
+                    "message": str(exc),
+                    "details": {
+                        "scenario_id": str(exc.scenario_id),
+                        "expected_version": exc.expected_version,
+                        "current_version": exc.current_version,
+                    },
+                }
+            },
+        )
+
+    @application.exception_handler(ConsultantServiceError)
+    async def consultant_error_handler(
+        _request: Request,
+        exc: ConsultantServiceError,
+    ) -> JSONResponse:
+        errors = {
+            "ai_not_configured": (503, "AI-консультант не настроен"),
+            "ai_unavailable": (503, "AI-консультант временно недоступен"),
+            "ai_timeout": (504, "Превышено время ожидания ответа AI-консультанта"),
+            "invalid_ai_response": (502, "AI-консультант вернул некорректный ответ"),
+            "ai_refusal": (502, "AI-консультант отказался формировать ответ"),
+            "ai_contract_mismatch": (502, "Нарушен контракт с AI-сервисом"),
+        }
+        status_code, message = errors.get(
+            exc.code,
+            (503, "AI-консультант временно недоступен"),
+        )
+        return JSONResponse(
+            status_code=status_code,
+            content={"error": {"code": exc.code, "message": message}},
         )
 
     @application.get("/", include_in_schema=False)
@@ -104,6 +169,7 @@ def create_app() -> FastAPI:
 
     application.include_router(router, prefix=settings.api_v1_prefix)
     application.include_router(scenario_router, prefix=settings.api_v1_prefix)
+    application.include_router(chat_router, prefix=settings.api_v1_prefix)
     return application
 
 

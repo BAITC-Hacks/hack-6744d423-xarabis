@@ -14,7 +14,10 @@ Quality of Life Score. AI не участвует в вычислениях.
 - расчёт районных оценок, критических показателей и итогового Score;
 - подробная трассировка эффектов для внешнего AI-консультанта;
 - хранение сценариев, решений и результатов в PostgreSQL;
-- история расчётов и optimistic locking через версию сценария;
+- пагинированный список, сброс, удаление и история сценариев;
+- optimistic locking через версию сценария;
+- структурированные ошибки игровых правил и настраиваемый CORS;
+- доверенная интеграция со сторонним AI-консультантом и история чата;
 - OpenAPI и автоматические тесты.
 
 ## Архитектура
@@ -47,7 +50,11 @@ uvicorn city_simulator.main:app --reload
 ```
 
 Подключение к базе задаётся через `DATABASE_URL`. Пример находится в `.env.example`.
-Локальный файл `.env` не отслеживается Git.
+Разрешённые origin frontend задаются списком через запятую в
+`CORS_ALLOWED_ORIGINS`. Локальный файл `.env` не отслеживается Git.
+Адрес отдельного AI-сервиса задаётся через `AI_SERVICE_URL`, таймаут — через
+`AI_SERVICE_TIMEOUT_SECONDS`. Основной backend сам формирует доверенный контекст и
+не принимает результаты симуляции от браузера.
 
 Запуск backend и PostgreSQL через Docker:
 
@@ -73,11 +80,16 @@ Swagger UI: <http://127.0.0.1:8000/docs>
 | `POST` | `/api/v1/scenarios/validate` | Проверка неполного выбора |
 | `POST` | `/api/v1/scenarios/simulate` | Финальная проверка и расчёт |
 | `POST` | `/api/v1/scenarios` | Создать хранимый сценарий |
+| `GET` | `/api/v1/scenarios` | Получить страницу сценариев |
 | `GET` | `/api/v1/scenarios/{id}` | Получить сценарий |
 | `PUT` | `/api/v1/scenarios/{id}/decisions` | Заменить выбор мероприятий |
+| `POST` | `/api/v1/scenarios/{id}/reset` | Сбросить выбор мероприятий |
+| `DELETE` | `/api/v1/scenarios/{id}` | Удалить сценарий |
 | `POST` | `/api/v1/scenarios/{id}/calculate` | Рассчитать и сохранить результат |
 | `GET` | `/api/v1/scenarios/{id}/result` | Актуальный результат |
 | `GET` | `/api/v1/scenarios/{id}/results` | История расчётов |
+| `POST` | `/api/v1/scenarios/{id}/chat/messages` | Отправить вопрос консультанту |
+| `GET` | `/api/v1/scenarios/{id}/chat/messages` | Получить историю чата |
 
 Пример финального расчёта:
 

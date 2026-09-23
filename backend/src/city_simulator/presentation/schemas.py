@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -101,6 +101,17 @@ class SimulationResponse(BaseModel):
     effects: list[EffectResponse]
 
 
-class ErrorResponse(BaseModel):
+class ErrorDetail(BaseModel):
     code: str
-    details: list[str]
+    message: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorPayload(BaseModel):
+    code: str
+    message: str
+    details: list[ErrorDetail] | dict[str, Any] | list[dict[str, Any]] | None = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorPayload

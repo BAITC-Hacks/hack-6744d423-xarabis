@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     app_debug: bool = False
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite+aiosqlite:///./xarabis.db"
+    cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    ai_service_url: str = "http://127.0.0.1:8001"
+    ai_service_timeout_seconds: float = Field(default=45.0, gt=0, le=120)
 
     @field_validator("database_url")
     @classmethod
@@ -23,6 +26,10 @@ class Settings(BaseSettings):
         if value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         return value
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache

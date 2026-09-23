@@ -24,12 +24,17 @@ from city_simulator.presentation.schemas import (
     DistrictResultResponse,
     DraftValidationResponse,
     EffectResponse,
+    ErrorResponse,
     IndicatorResponse,
     MeasureResponse,
     SimulationResponse,
 )
 
 router = APIRouter()
+
+VALIDATION_ERROR_RESPONSE = {
+    422: {"model": ErrorResponse, "description": "Невалидный запрос или сценарий"}
+}
 
 
 def _to_decisions(payload: DecisionsRequest) -> list[Decision]:
@@ -174,6 +179,7 @@ def list_measures(
 @router.post(
     "/scenarios/validate",
     response_model=DraftValidationResponse,
+    responses=VALIDATION_ERROR_RESPONSE,
     tags=["simulation"],
 )
 def validate_draft(
@@ -192,7 +198,12 @@ def validate_draft(
     )
 
 
-@router.post("/scenarios/simulate", response_model=SimulationResponse, tags=["simulation"])
+@router.post(
+    "/scenarios/simulate",
+    response_model=SimulationResponse,
+    responses=VALIDATION_ERROR_RESPONSE,
+    tags=["simulation"],
+)
 def simulate(
     payload: DecisionsRequest,
     use_case: Annotated[SimulateScenarioUseCase, Depends(get_simulate_use_case)],

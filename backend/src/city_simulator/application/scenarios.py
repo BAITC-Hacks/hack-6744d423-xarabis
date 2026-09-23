@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from uuid import UUID
 
 from city_simulator.domain.entities import Decision
@@ -42,6 +43,24 @@ class GetScenarioUseCase:
         return scenario
 
 
+@dataclass(frozen=True, slots=True)
+class ScenarioPage:
+    items: Sequence[Scenario]
+    total: int
+    limit: int
+    offset: int
+
+
+class ListScenariosUseCase:
+    def __init__(self, scenarios: ScenarioRepository) -> None:
+        self._scenarios = scenarios
+
+    async def execute(self, *, limit: int, offset: int) -> ScenarioPage:
+        items = await self._scenarios.list(limit=limit, offset=offset)
+        total = await self._scenarios.count()
+        return ScenarioPage(items=items, total=total, limit=limit, offset=offset)
+
+
 class ReplaceScenarioDecisionsUseCase:
     def __init__(
         self,
@@ -68,6 +87,26 @@ class ReplaceScenarioDecisionsUseCase:
         )
 
 
+class ResetScenarioUseCase:
+    def __init__(self, scenarios: ScenarioRepository) -> None:
+        self._scenarios = scenarios
+
+    async def execute(self, scenario_id: UUID, *, expected_version: int) -> Scenario:
+        return await self._scenarios.replace_decisions(
+            scenario_id,
+            expected_version=expected_version,
+            decisions=(),
+        )
+
+
+class DeleteScenarioUseCase:
+    def __init__(self, scenarios: ScenarioRepository) -> None:
+        self._scenarios = scenarios
+
+    async def execute(self, scenario_id: UUID, *, expected_version: int) -> None:
+        await self._scenarios.delete(scenario_id, expected_version=expected_version)
+
+
 class CalculateStoredScenarioUseCase:
     def __init__(
         self,
@@ -91,7 +130,11 @@ class CalculateStoredScenarioUseCase:
         if scenario is None:
             raise ScenarioNotFoundError(scenario_id)
         if scenario.version != expected_version:
-            raise ScenarioVersionConflictError(scenario_id)
+            raise ScenarioVersionConflictError(
+                scenario_id,
+                expected_version=expected_version,
+                current_version=scenario.version,
+            )
         dataset = self._city_data.get_dataset()
         self._validator.validate(scenario.decisions, dataset)
         result = self._calculator.calculate(scenario.decisions, dataset)

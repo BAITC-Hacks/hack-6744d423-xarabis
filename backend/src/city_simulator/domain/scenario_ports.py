@@ -14,6 +14,12 @@ class ScenarioRepository(ABC):
     async def get(self, scenario_id: UUID) -> Scenario | None: ...
 
     @abstractmethod
+    async def list(self, *, limit: int, offset: int) -> Sequence[Scenario]: ...
+
+    @abstractmethod
+    async def count(self) -> int: ...
+
+    @abstractmethod
     async def replace_decisions(
         self,
         scenario_id: UUID,
@@ -36,3 +42,6 @@ class ScenarioRepository(ABC):
 
     @abstractmethod
     async def list_results(self, scenario_id: UUID) -> Sequence[StoredSimulationResult]: ...
+
+    @abstractmethod
+    async def delete(self, scenario_id: UUID, *, expected_version: int) -> None: ...

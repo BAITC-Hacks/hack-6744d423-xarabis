@@ -153,7 +153,14 @@ button:disabled { cursor: not-allowed; }
 .astana-map-shell .maplibregl-ctrl-attrib.maplibregl-compact-show { color: #e4eee8; background: rgb(17 34 32 / 90%); font-size: 9px; }
 .astana-map-shell .maplibregl-ctrl-attrib a { color: #f0d596; }
 .astana-map-shell .maplibregl-ctrl-group { overflow: hidden; background: rgb(235 245 236 / 94%); border-radius: 7px; box-shadow: 0 6px 20px rgb(0 0 0 / 22%); }
-.unity-city-view { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 42%, #f9fbf5 0%, #edf1e8 74%, #e4e9df 100%); }
+.unity-city-view { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(ellipse at 50% 42%, #f9fbf5 0%, #edf1e8 74%, #e4e9df 100%); }
+.unity-stage { position: relative; flex: 1; min-height: 0; }
+.unity-map-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 9px 12px; background: #f8faf6; border-top: 1px solid #dfe6dd; }
+.unity-focus-controls { display: flex; flex-wrap: wrap; gap: 5px; }
+.unity-focus-controls button { min-height: 38px; padding: 7px 10px; border: 1px solid #cbd8ce; border-radius: 6px; color: #365346; background: #fff; font: 700 11px Manrope, sans-serif; cursor: pointer; }
+.unity-focus-controls button[aria-pressed="true"] { color: #fff; background: #286d5d; border-color: #286d5d; }
+.unity-focus-controls button:disabled { opacity: .5; cursor: wait; }
+.unity-map-toolbar a { color: #4c6256; font-size: 10px; }
 .unity-city-canvas { width: 100%; height: 100%; display: block; background: transparent; outline: none; }
 .unity-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; color: #53645a; text-align: center; background: radial-gradient(ellipse at center, rgb(255 255 255 / 92%), rgb(242 245 238 / 92%)); }
 .unity-loading-mark { width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: 5px; color: #356e5b; background: #e2eee2; border: 1px solid #d2e4d6; border-radius: 14px; font: 800 13px Manrope, sans-serif; letter-spacing: .4px; box-shadow: 0 7px 18px rgb(42 79 56 / 8%); }

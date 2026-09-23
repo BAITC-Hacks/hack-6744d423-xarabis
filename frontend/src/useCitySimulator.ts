@@ -29,15 +29,24 @@ type Bootstrap = {
 };
 
 function toApi(decisions: Decision[]): ApiDecision[] {
-  return decisions.map((decision) => ({ measure_id: decision.measureId, district_id: decision.districtId ?? null }));
+  return decisions.map((decision) => ({
+    measure_id: decision.measureId,
+    district_id: decision.districtId ?? null,
+  }));
 }
 
 function fromApi(decisions: ApiDecision[]): Decision[] {
-  return decisions.map((decision) => ({ measureId: decision.measure_id, ...(decision.district_id ? { districtId: decision.district_id } : {}) }));
+  return decisions.map((decision) => ({
+    measureId: decision.measure_id,
+    ...(decision.district_id ? { districtId: decision.district_id } : {}),
+  }));
 }
 
 function sameDecisions(local: Decision[], saved: ApiDecision[]) {
-  const canonical = (items: ApiDecision[]) => JSON.stringify([...items].sort((a, b) => a.measure_id.localeCompare(b.measure_id)));
+  const canonical = (items: ApiDecision[]) =>
+    JSON.stringify(
+      [...items].sort((a, b) => a.measure_id.localeCompare(b.measure_id)),
+    );
   return canonical(toApi(local)) === canonical(saved);
 }
 
@@ -45,8 +54,17 @@ function readPendingDraft(scenario: Scenario): Decision[] | null {
   try {
     const raw = window.localStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
-    const pending = JSON.parse(raw) as { scenarioId: string; version: number; decisions: ApiDecision[] };
-    if (pending.scenarioId !== scenario.id || pending.version !== scenario.version || !Array.isArray(pending.decisions)) return null;
+    const pending = JSON.parse(raw) as {
+      scenarioId: string;
+      version: number;
+      decisions: ApiDecision[];
+    };
+    if (
+      pending.scenarioId !== scenario.id ||
+      pending.version !== scenario.version ||
+      !Array.isArray(pending.decisions)
+    )
+      return null;
     return fromApi(pending.decisions);
   } catch {
     return null;
@@ -57,14 +75,22 @@ async function optionalResult(id: string) {
   try {
     return await cityApi.getCurrentResult(id);
   } catch (error) {
-    if (error instanceof ApiRequestError && error.status === 404 && error.code === "result_not_found") return null;
+    if (
+      error instanceof ApiRequestError &&
+      error.status === 404 &&
+      error.code === "result_not_found"
+    )
+      return null;
     throw error;
   }
 }
 
 async function bootstrap(): Promise<Bootstrap> {
   const [catalog, indicators, districts, measures] = await Promise.all([
-    cityApi.getCatalog(), cityApi.getIndicators(), cityApi.getDistricts(), cityApi.getMeasures(),
+    cityApi.getCatalog(),
+    cityApi.getIndicators(),
+    cityApi.getDistricts(),
+    cityApi.getMeasures(),
   ]);
   const savedId = window.localStorage.getItem(SCENARIO_KEY);
   let scenario: Scenario;
@@ -73,7 +99,14 @@ async function bootstrap(): Promise<Bootstrap> {
     try {
       scenario = await cityApi.getScenario(savedId);
     } catch (error) {
-      if (!(error instanceof ApiRequestError && error.status === 404 && error.code === "scenario_not_found")) throw error;
+      if (
+        !(
+          error instanceof ApiRequestError &&
+          error.status === 404 &&
+          error.code === "scenario_not_found"
+        )
+      )
+        throw error;
       window.localStorage.removeItem(SCENARIO_KEY);
       window.localStorage.removeItem(DRAFT_KEY);
       scenario = await cityApi.createScenario();
@@ -88,24 +121,41 @@ async function bootstrap(): Promise<Bootstrap> {
     cityApi.getResults(scenario.id).catch(() => [] as StoredSimulationResult[]),
   ]);
   return {
-    catalog, indicators, districts, measures, scenario,
+    catalog,
+    indicators,
+    districts,
+    measures,
+    scenario,
     decisions: readPendingDraft(scenario) ?? fromApi(scenario.decisions),
-    result, history, scenarioWasLost,
+    result: readPendingDraft(scenario) ? null : result,
+    history,
+    scenarioWasLost,
   };
 }
 
 function describeError(error: unknown): string[] {
   if (error instanceof ApiRequestError) {
-    if (error.code === "scenario_validation_error" && Array.isArray(error.details)) {
-      return error.details.map((issue: unknown) => issue && typeof issue === "object" && "message" in issue ? String(issue.message) : String(issue));
+    if (
+      error.code === "scenario_validation_error" &&
+      Array.isArray(error.details)
+    ) {
+      return error.details.map((issue: unknown) =>
+        issue && typeof issue === "object" && "message" in issue
+          ? String(issue.message)
+          : String(issue),
+      );
     }
     if (error.code === "invalid_request") {
       console.error("Некорректный запрос к City Simulator API", error.details);
-      return ["Некорректный запрос к серверу. Обнови страницу или сообщи команде."];
+      return [
+        "Некорректный запрос к серверу. Обнови страницу или сообщи команде.",
+      ];
     }
     return [error.message];
   }
-  return ["Не удалось связаться с сервером. Проверь подключение и повтори действие."];
+  return [
+    "Не удалось связаться с сервером. Проверь подключение и повтори действие.",
+  ];
 }
 
 export function useCitySimulator() {
@@ -122,43 +172,65 @@ export function useCitySimulator() {
   const [isValidating, setIsValidating] = useState(false);
   const [result, setResult] = useState<StoredSimulationResult | null>(null);
   const [history, setHistory] = useState<StoredSimulationResult[]>([]);
-  const [busy, setBusy] = useState<"saving" | "calculating" | null>(null);
+  const [busy, setBusy] = useState<"saving" | "calculating" | "opening" | null>(
+    null,
+  );
   const [issues, setIssues] = useState<string[]>([]);
-  const [failedAction, setFailedAction] = useState<"save" | "calculate" | null>(null);
+  const [failedAction, setFailedAction] = useState<"save" | "calculate" | null>(
+    null,
+  );
   const [connectionError, setConnectionError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
 
   useEffect(() => {
     let active = true;
     bootstrapRef.current ??= bootstrap();
-    bootstrapRef.current.then((loaded) => {
-      if (!active) return;
-      setCatalog(loaded.catalog);
-      setIndicators(loaded.indicators);
-      setDistricts(loaded.districts);
-      setMeasures(loaded.measures);
-      setScenario(loaded.scenario);
-      setDecisions(loaded.decisions);
-      setResult(loaded.result);
-      setHistory(loaded.history);
-      setConnectionError("");
-      setStatusMessage(loaded.scenarioWasLost ? "Прежний черновик недоступен. Создан новый сценарий." : "");
-      setMode("live");
-    }).catch((error) => {
-      if (!active) return;
-      setConnectionError(describeError(error)[0]);
-      setMode("demo");
-    });
-    return () => { active = false; };
+    bootstrapRef.current
+      .then((loaded) => {
+        if (!active) return;
+        setCatalog(loaded.catalog);
+        setIndicators(loaded.indicators);
+        setDistricts(loaded.districts);
+        setMeasures(loaded.measures);
+        setScenario(loaded.scenario);
+        setDecisions(loaded.decisions);
+        setResult(loaded.result);
+        setHistory(loaded.history);
+        setConnectionError("");
+        setStatusMessage(
+          loaded.scenarioWasLost
+            ? "Прежний черновик недоступен. Создан новый сценарий."
+            : "",
+        );
+        setMode("live");
+      })
+      .catch((error) => {
+        if (!active) return;
+        setConnectionError(describeError(error)[0]);
+        setMode("demo");
+      });
+    return () => {
+      active = false;
+    };
   }, [retryKey]);
 
-  const hasUnsavedChanges = useMemo(() => scenario ? !sameDecisions(decisions, scenario.decisions) : false, [decisions, scenario]);
+  const hasUnsavedChanges = useMemo(
+    () => (scenario ? !sameDecisions(decisions, scenario.decisions) : false),
+    [decisions, scenario],
+  );
 
   useEffect(() => {
     if (mode !== "live" || !scenario) return;
     try {
       if (hasUnsavedChanges) {
-        window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ scenarioId: scenario.id, version: scenario.version, decisions: toApi(decisions) }));
+        window.localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            scenarioId: scenario.id,
+            version: scenario.version,
+            decisions: toApi(decisions),
+          }),
+        );
       } else {
         window.localStorage.removeItem(DRAFT_KEY);
       }
@@ -173,16 +245,26 @@ export function useCitySimulator() {
     setValidation(null);
     setIsValidating(true);
     const timeout = window.setTimeout(() => {
-      cityApi.validate(toApi(decisions), controller.signal).then((next) => {
-        setValidation(next);
-        setIssues([]);
-      }).catch((error) => {
-        if (controller.signal.aborted) return;
-        setValidation(null);
-        setIssues(describeError(error));
-      }).finally(() => { if (!controller.signal.aborted) setIsValidating(false); });
+      cityApi
+        .validate(toApi(decisions), controller.signal)
+        .then((next) => {
+          if (controller.signal.aborted) return;
+          setValidation(next);
+          setIssues([]);
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          setValidation(null);
+          setIssues(describeError(error));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsValidating(false);
+        });
     }, 320);
-    return () => { window.clearTimeout(timeout); controller.abort(); };
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [mode, scenario?.id, decisions]);
 
   function updateDecisions(next: Decision[]) {
@@ -200,8 +282,14 @@ export function useCitySimulator() {
     setScenario(fresh);
     setDecisions(fromApi(fresh.decisions));
     setResult(await optionalResult(fresh.id));
-    setHistory(await cityApi.getResults(fresh.id).catch(() => [] as StoredSimulationResult[]));
-    setIssues(["Сценарий изменился в другом окне. Загружена актуальная версия; проверь план перед повтором."]);
+    setHistory(
+      await cityApi
+        .getResults(fresh.id)
+        .catch(() => [] as StoredSimulationResult[]),
+    );
+    setIssues([
+      "Сценарий изменился в другом окне. Загружена актуальная версия; проверь план перед повтором.",
+    ]);
   }
 
   async function recoverMissingScenario() {
@@ -212,26 +300,48 @@ export function useCitySimulator() {
     setScenario(fresh);
     setResult(null);
     setHistory([]);
-    setIssues(["Прежний сценарий недоступен. Создан новый; текущий выбор остался черновиком."]);
+    setIssues([
+      "Прежний сценарий недоступен. Создан новый; текущий выбор остался черновиком.",
+    ]);
   }
 
   async function saveDraft() {
-    if (mode !== "live" || !scenario || !validation || !hasUnsavedChanges || busy) return false;
+    if (
+      mode !== "live" ||
+      !scenario ||
+      !validation ||
+      !hasUnsavedChanges ||
+      busy
+    )
+      return false;
     setBusy("saving");
     setIssues([]);
     setFailedAction(null);
     try {
-      const saved = await cityApi.replaceDecisions(scenario.id, scenario.version, toApi(decisions));
+      const saved = await cityApi.replaceDecisions(
+        scenario.id,
+        scenario.version,
+        toApi(decisions),
+      );
       setScenario(saved);
       setResult(null);
       setStatusMessage("План сохранён. Версия сценария обновлена.");
       return true;
     } catch (error) {
-      if (error instanceof ApiRequestError && error.code === "scenario_version_conflict") await recoverConflict();
-      else if (error instanceof ApiRequestError && error.code === "scenario_not_found") await recoverMissingScenario();
+      if (
+        error instanceof ApiRequestError &&
+        error.code === "scenario_version_conflict"
+      )
+        await recoverConflict();
+      else if (
+        error instanceof ApiRequestError &&
+        error.code === "scenario_not_found"
+      )
+        await recoverMissingScenario();
       else {
         setIssues(describeError(error));
-        if (!(error instanceof ApiRequestError) || error.status >= 500) setFailedAction("save");
+        if (!(error instanceof ApiRequestError) || error.status >= 500)
+          setFailedAction("save");
       }
       return false;
     } finally {
@@ -240,7 +350,14 @@ export function useCitySimulator() {
   }
 
   async function calculate() {
-    if (mode !== "live" || !scenario || !validation?.ready_for_calculation || hasUnsavedChanges || busy) return false;
+    if (
+      mode !== "live" ||
+      !scenario ||
+      !validation?.ready_for_calculation ||
+      hasUnsavedChanges ||
+      busy
+    )
+      return false;
     setBusy("calculating");
     setIssues([]);
     setFailedAction(null);
@@ -248,16 +365,56 @@ export function useCitySimulator() {
       const calculated = await cityApi.calculate(scenario.id, scenario.version);
       setResult(calculated);
       setScenario({ ...scenario, status: "calculated" });
-      setHistory(await cityApi.getResults(scenario.id).catch(() => [calculated]));
+      setHistory(
+        await cityApi.getResults(scenario.id).catch(() => [calculated]),
+      );
       setStatusMessage("Расчёт готов. Показаны результаты сервера.");
       return true;
     } catch (error) {
-      if (error instanceof ApiRequestError && error.code === "scenario_version_conflict") await recoverConflict();
-      else if (error instanceof ApiRequestError && error.code === "scenario_not_found") await recoverMissingScenario();
+      if (
+        error instanceof ApiRequestError &&
+        error.code === "scenario_version_conflict"
+      )
+        await recoverConflict();
+      else if (
+        error instanceof ApiRequestError &&
+        error.code === "scenario_not_found"
+      )
+        await recoverMissingScenario();
       else {
         setIssues(describeError(error));
-        if (!(error instanceof ApiRequestError) || error.status >= 500) setFailedAction("calculate");
+        if (!(error instanceof ApiRequestError) || error.status >= 500)
+          setFailedAction("calculate");
       }
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openScenario(id?: string) {
+    if (mode !== "live" || busy || hasUnsavedChanges) return false;
+    setBusy("opening");
+    setIssues([]);
+    try {
+      const next = id
+        ? await cityApi.getScenario(id)
+        : await cityApi.createScenario();
+      const [nextResult, nextHistory] = await Promise.all([
+        optionalResult(next.id),
+        cityApi.getResults(next.id),
+      ]);
+      window.localStorage.setItem(SCENARIO_KEY, next.id);
+      setScenario(next);
+      setDecisions(fromApi(next.decisions));
+      setResult(nextResult);
+      setHistory(nextHistory);
+      setValidation(null);
+      setFailedAction(null);
+      setStatusMessage(id ? "Сценарий открыт." : "Создан новый сценарий.");
+      return true;
+    } catch (error) {
+      setIssues(describeError(error));
       return false;
     } finally {
       setBusy(null);
@@ -272,8 +429,27 @@ export function useCitySimulator() {
   }
 
   return {
-    mode, catalog, indicators, districts, measures, scenario, decisions, validation, isValidating,
-    result, history, busy, issues, failedAction, connectionError, statusMessage, hasUnsavedChanges,
-    updateDecisions, saveDraft, calculate, retryConnection,
+    mode,
+    catalog,
+    indicators,
+    districts,
+    measures,
+    scenario,
+    decisions,
+    validation,
+    isValidating,
+    result,
+    history,
+    busy,
+    issues,
+    failedAction,
+    connectionError,
+    statusMessage,
+    hasUnsavedChanges,
+    updateDecisions,
+    saveDraft,
+    calculate,
+    retryConnection,
+    openScenario,
   };
 }

@@ -87,7 +87,7 @@ createServer(async (request, response) => {
     return;
   }
   const extension = target.slice(target.lastIndexOf("."));
-  if (extension === ".geojson" && /\bgzip\b/i.test(request.headers["accept-encoding"] ?? "")) {
+  if ((extension === ".geojson" || extension === ".json") && /\bgzip\b/i.test(request.headers["accept-encoding"] ?? "")) {
     if (await sendFile(response, `${target}.gz`, {
       "Content-Type": mimeTypes[extension],
       "Content-Encoding": "gzip",

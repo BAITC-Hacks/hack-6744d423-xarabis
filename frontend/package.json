@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
+    "test": "node scripts/check-project-previews.mjs",
     "preview": "vite preview",
     "serve": "node serve.mjs"
   },

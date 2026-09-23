@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from city_simulator.domain.enums import ConflictScope, IndicatorCode, MeasureScope
+from city_simulator.domain.enums import ConflictScope, Direction, IndicatorCode, MeasureScope
 from city_simulator.domain.exceptions import DatasetConfigurationError
 from city_simulator.infrastructure.repositories import VersionedJsonCityDataRepository
 
@@ -45,40 +45,66 @@ def test_dataset_rules_and_district_rows_match_source_document(dataset) -> None:
         "C2": 0.10,
     }
     assert {
-        indicator.id.value: (indicator.name, indicator.scale_description)
+        indicator.id.value: (indicator.direction, indicator.name, indicator.scale_description)
         for indicator in dataset.indicators
     } == {
-        "T1": ("Разгрузка дорог", "100 = нет пробок в час пик, 0 = стоит всё"),
+        "T1": (
+            Direction.TRANSPORT,
+            "Разгрузка дорог",
+            "100 = нет пробок в час пик, 0 = стоит всё",
+        ),
         "T2": (
+            Direction.TRANSPORT,
             "Доступность общественного транспорта",
             "100 = все жители в 500 м от остановки с интервалом ≤10 мин",
         ),
-        "E1": ("Озеленение", "100 = ≥20 м² зелени на жителя"),
-        "E2": ("Качество воздуха", "100 = зимой AQI ≤50, 0 = хронический смог"),
-        "S1": ("Школы и детсады", "100 = 100% нормативной потребности, без 2-й смены"),
+        "E1": (Direction.ECOLOGY, "Озеленение", "100 = ≥20 м² зелени на жителя"),
+        "E2": (
+            Direction.ECOLOGY,
+            "Качество воздуха",
+            "100 = зимой AQI ≤50, 0 = хронический смог",
+        ),
+        "S1": (
+            Direction.SOCIAL,
+            "Школы и детсады",
+            "100 = 100% нормативной потребности, без 2-й смены",
+        ),
         "S2": (
+            Direction.SOCIAL,
             "Поликлиники и первичная медпомощь",
             "100 = норматив на жителя выполнен полностью",
         ),
         "B1": (
+            Direction.SAFETY,
             "Безопасность улиц",
             "100 = освещение и камеры везде, минимум происшествий",
         ),
-        "B2": ("Безопасность дорожного движения", "100 = минимум ДТП с пострадавшими"),
-        "C1": ("Надёжность ЖКХ", "100 = нет аварий отопления/воды за год"),
+        "B2": (
+            Direction.SAFETY,
+            "Безопасность дорожного движения",
+            "100 = минимум ДТП с пострадавшими",
+        ),
+        "C1": (
+            Direction.SERVICES,
+            "Надёжность ЖКХ",
+            "100 = нет аварий отопления/воды за год",
+        ),
         "C2": (
+            Direction.SERVICES,
             "Скорость решения обращений жителей",
             "100 = все обращения закрыты в срок",
         ),
     }
     assert {
         district.id: (
+            district.name,
             district.population_share,
             {code.value: value for code, value in district.indicators.items()},
         )
         for district in dataset.districts
     } == {
         "esil": (
+            "Есиль",
             0.27,
             {
                 "T1": 45,
@@ -94,6 +120,7 @@ def test_dataset_rules_and_district_rows_match_source_document(dataset) -> None:
             },
         ),
         "almaty": (
+            "Алматы",
             0.24,
             {
                 "T1": 40,
@@ -109,6 +136,7 @@ def test_dataset_rules_and_district_rows_match_source_document(dataset) -> None:
             },
         ),
         "saryarka": (
+            "Сарыарка",
             0.20,
             {
                 "T1": 50,
@@ -124,6 +152,7 @@ def test_dataset_rules_and_district_rows_match_source_document(dataset) -> None:
             },
         ),
         "baikonur": (
+            "Байконур",
             0.13,
             {
                 "T1": 52,
@@ -139,6 +168,7 @@ def test_dataset_rules_and_district_rows_match_source_document(dataset) -> None:
             },
         ),
         "nura": (
+            "Нура",
             0.16,
             {
                 "T1": 55,
@@ -166,6 +196,8 @@ def test_dataset_rules_and_district_rows_match_source_document(dataset) -> None:
 def test_measures_synergies_and_conflicts_match_source_document(dataset) -> None:
     assert {
         measure.id: (
+            measure.direction,
+            measure.name,
             measure.scope,
             measure.cost,
             measure.lag_quarters,
@@ -173,20 +205,118 @@ def test_measures_synergies_and_conflicts_match_source_document(dataset) -> None
         )
         for measure in dataset.measures
     } == {
-        "M1": (MeasureScope.DISTRICT, 18, 2, {"T1": 6, "T2": 9}),
-        "M2": (MeasureScope.CITY, 22, 2, {"T1": 4, "B2": 3}),
-        "M3": (MeasureScope.DISTRICT, 30, 4, {"T1": 16, "T2": 20, "E2": 4}),
-        "M4": (MeasureScope.DISTRICT, 15, 2, {"E1": 12, "E2": 3, "B1": 2}),
-        "M5": (MeasureScope.DISTRICT, 25, 3, {"E2": 14, "C1": 4}),
-        "M6": (MeasureScope.CITY, 20, 4, {"E1": 5, "E2": 3}),
-        "M7": (MeasureScope.DISTRICT, 24, 3, {"S1": 16}),
-        "M8": (MeasureScope.DISTRICT, 20, 3, {"S2": 14}),
-        "M9": (MeasureScope.DISTRICT, 10, 1, {"S1": 3, "S2": 3, "B1": 3}),
-        "M10": (MeasureScope.DISTRICT, 12, 1, {"B1": 12, "B2": 2}),
-        "M11": (MeasureScope.DISTRICT, 10, 1, {"B2": 12, "T1": -2}),
-        "M12": (MeasureScope.CITY, 14, 1, {"C2": 5}),
-        "M13": (MeasureScope.DISTRICT, 28, 4, {"C1": 18, "E2": 2}),
-        "M14": (MeasureScope.CITY, 16, 1, {"C1": 5, "C2": 2}),
+        "M1": (
+            Direction.TRANSPORT,
+            "Выделенные полосы для автобусов",
+            MeasureScope.DISTRICT,
+            18,
+            2,
+            {"T1": 6, "T2": 9},
+        ),
+        "M2": (
+            Direction.TRANSPORT,
+            "Умные светофоры (адаптивное управление)",
+            MeasureScope.CITY,
+            22,
+            2,
+            {"T1": 4, "B2": 3},
+        ),
+        "M3": (
+            Direction.TRANSPORT,
+            "Линия ЛРТ / расширение",
+            MeasureScope.DISTRICT,
+            30,
+            4,
+            {"T1": 16, "T2": 20, "E2": 4},
+        ),
+        "M4": (
+            Direction.ECOLOGY,
+            "Парк / сквер",
+            MeasureScope.DISTRICT,
+            15,
+            2,
+            {"E1": 12, "E2": 3, "B1": 2},
+        ),
+        "M5": (
+            Direction.ECOLOGY,
+            "Перевод частного сектора на чистое топливо",
+            MeasureScope.DISTRICT,
+            25,
+            3,
+            {"E2": 14, "C1": 4},
+        ),
+        "M6": (
+            Direction.ECOLOGY,
+            "Городская программа озеленения и ветрозащитных полос",
+            MeasureScope.CITY,
+            20,
+            4,
+            {"E1": 5, "E2": 3},
+        ),
+        "M7": (
+            Direction.SOCIAL,
+            "Школа + детсад (модульное строительство)",
+            MeasureScope.DISTRICT,
+            24,
+            3,
+            {"S1": 16},
+        ),
+        "M8": (
+            Direction.SOCIAL,
+            "Центр семейного здоровья / поликлиника",
+            MeasureScope.DISTRICT,
+            20,
+            3,
+            {"S2": 14},
+        ),
+        "M9": (
+            Direction.SOCIAL,
+            "Дворовые спорт-хабы",
+            MeasureScope.DISTRICT,
+            10,
+            1,
+            {"S1": 3, "S2": 3, "B1": 3},
+        ),
+        "M10": (
+            Direction.SAFETY,
+            "Освещение и камеры (расширение Safe City)",
+            MeasureScope.DISTRICT,
+            12,
+            1,
+            {"B1": 12, "B2": 2},
+        ),
+        "M11": (
+            Direction.SAFETY,
+            "Безопасные переходы и школьные зоны",
+            MeasureScope.DISTRICT,
+            10,
+            1,
+            {"B2": 12, "T1": -2},
+        ),
+        "M12": (
+            Direction.SERVICES,
+            "Единая цифровая платформа обращений",
+            MeasureScope.CITY,
+            14,
+            1,
+            {"C2": 5},
+        ),
+        "M13": (
+            Direction.SERVICES,
+            "Модернизация тепло- и водосетей",
+            MeasureScope.DISTRICT,
+            28,
+            4,
+            {"C1": 18, "E2": 2},
+        ),
+        "M14": (
+            Direction.SERVICES,
+            "Аварийные бригады ЖКХ + раннее оповещение",
+            MeasureScope.CITY,
+            16,
+            1,
+            {"C1": 5, "C2": 2},
+        ),
     }
     assert [
         (item.measure_ids, item.target_measure_id, item.indicator_id.value, item.delta)

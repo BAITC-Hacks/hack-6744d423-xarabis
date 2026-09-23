@@ -25,6 +25,11 @@ def test_baseline_score_matches_dataset(dataset) -> None:
     )
     assert len(result.critical_before) == 2
     assert result.critical_before == result.critical_after
+    assert result.city_average == pytest.approx(56.8624)
+    assert result.weakest_district_score == pytest.approx(49.18)
+    assert result.score_before == pytest.approx(
+        0.7 * result.city_average + 0.3 * result.weakest_district_score - 2
+    )
 
 
 def test_example_scenario_matches_document(dataset, example_decisions) -> None:
@@ -73,13 +78,52 @@ def test_city_measure_affects_every_district(dataset) -> None:
         ) == pytest.approx(4.375)
 
 
-def test_synergy_is_fixed_and_not_scaled_by_lag(dataset) -> None:
-    result = ScoreCalculator().calculate(
-        (Decision("M10", "nura"), Decision("M12")),
-        dataset,
+@pytest.mark.parametrize(
+    ("decisions", "district_id", "indicator_id", "expected_value", "measure_ids"),
+    [
+        (
+            (Decision("M1", "esil"), Decision("M2")),
+            "esil",
+            IndicatorCode.T1,
+            54.5,
+            ("M1", "M2"),
+        ),
+        (
+            (Decision("M10", "nura"), Decision("M12")),
+            "nura",
+            IndicatorCode.B1,
+            67.5,
+            ("M10", "M12"),
+        ),
+        (
+            (Decision("M5", "saryarka"), Decision("M6")),
+            "saryarka",
+            IndicatorCode.E2,
+            52.25,
+            ("M5", "M6"),
+        ),
+    ],
+)
+def test_each_synergy_is_fixed_targets_first_measure_and_ignores_lag(
+    dataset,
+    decisions,
+    district_id,
+    indicator_id,
+    expected_value,
+    measure_ids,
+) -> None:
+    result = ScoreCalculator().calculate(decisions, dataset)
+    district = next(item for item in result.districts if item.district_id == district_id)
+    synergy = next(
+        effect
+        for effect in result.effects
+        if effect.kind is EffectKind.SYNERGY and effect.measure_ids == measure_ids
     )
-    nura = next(item for item in result.districts if item.district_id == "nura")
-    assert nura.indicators_after[IndicatorCode.B1] == pytest.approx(67.5)
+
+    assert district.indicators_after[indicator_id] == pytest.approx(expected_value)
+    assert synergy.district_id == district_id
+    assert synergy.indicator_id is indicator_id
+    assert synergy.delta == pytest.approx(2.0)
 
 
 def test_clipping_is_reflected_in_effect_trace(dataset) -> None:
@@ -102,6 +146,26 @@ def test_clipping_is_reflected_in_effect_trace(dataset) -> None:
     )
     assert esil_result.indicators_after[IndicatorCode.T1] == 100
     assert t1_effect.delta == pytest.approx(1.0)
+
+
+def test_negative_effect_and_lower_clipping_are_reflected_in_trace(dataset) -> None:
+    nura = dataset.get_district("nura")
+    assert nura is not None
+    indicators = dict(nura.indicators)
+    indicators[IndicatorCode.T1] = 1
+    modified_nura = replace(nura, indicators=MappingProxyType(indicators))
+    modified_dataset = replace(dataset, districts=(*dataset.districts[:-1], modified_nura))
+
+    result = ScoreCalculator().calculate((Decision("M11", "nura"),), modified_dataset)
+    nura_result = result.districts[-1]
+    t1_effect = next(
+        item
+        for item in result.effects
+        if item.district_id == "nura" and item.indicator_id is IndicatorCode.T1
+    )
+
+    assert nura_result.indicators_after[IndicatorCode.T1] == 0
+    assert t1_effect.delta == pytest.approx(-1.0)
 
 
 def test_decision_order_does_not_change_result(dataset, example_decisions) -> None:

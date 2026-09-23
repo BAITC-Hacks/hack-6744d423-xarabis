@@ -191,12 +191,9 @@ def create_app() -> FastAPI:
 
     application.include_router(router, prefix=settings.api_v1_prefix)
     application.include_router(scenario_router, prefix=settings.api_v1_prefix)
-<<<<<<< HEAD
     application.include_router(sandbox_router, prefix=settings.api_v1_prefix)
     application.include_router(district_sandbox_router, prefix=settings.api_v1_prefix)
-=======
     application.include_router(chat_router, prefix=settings.api_v1_prefix)
->>>>>>> bbcd980584d28e8d98f6495f3fad16bbf340e14e
     return application
 
 

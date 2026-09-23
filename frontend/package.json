@@ -6,10 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "test": "node scripts/check-project-previews.mjs",
+    "test": "node scripts/check-project-previews.mjs && node --test tests/*.test.mjs",
     "preview": "vite preview",
-    "serve": "node --env-file-if-exists=.env serve.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "serve": "node --env-file-if-exists=.env serve.mjs"
   },
   "dependencies": {
     "maplibre-gl": "^6.11.1",

@@ -1,1 +1,22 @@
 *.docx
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+
+# IDEs and local configuration
+.idea/
+.vscode/
+**/appsettings.Local.json
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Test results
+TestResults/
+*.trx

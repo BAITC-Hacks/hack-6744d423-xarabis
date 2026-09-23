@@ -1,5 +1,9 @@
 *.docx
-
+# Keep README files; other Markdown documents stay local.
+*.[mM][dD]
+![rR][eE][aA][dD][mM][eE].[mM][dD]
+# test 
+/demo 
 # .NET
 **/bin/
 **/obj/

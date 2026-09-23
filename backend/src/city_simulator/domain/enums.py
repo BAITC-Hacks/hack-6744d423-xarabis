@@ -24,6 +24,12 @@ class EffectKind(StrEnum):
     SYNERGY = "synergy"
 
 
+class ScenarioStatus(StrEnum):
+    DRAFT = "draft"
+    CALCULATED = "calculated"
+    COMPLETED = "completed"
+
+
 class IndicatorCode(StrEnum):
     T1 = "T1"
     T2 = "T2"

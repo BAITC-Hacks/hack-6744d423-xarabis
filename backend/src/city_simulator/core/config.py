@@ -1,25 +1,30 @@
-import os
-from dataclasses import dataclass
 from functools import lru_cache
 
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-def _as_bool(value: str) -> bool:
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-@dataclass(frozen=True, slots=True)
-class Settings:
-    app_name: str
-    app_env: str
-    debug: bool
-    api_v1_prefix: str
+    app_name: str = "Akim for 5 Hours API"
+    app_env: str = "local"
+    app_debug: bool = False
+    api_v1_prefix: str = "/api/v1"
+    database_url: str = "sqlite+aiosqlite:///./xarabis.db"
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings(
-        app_name=os.getenv("APP_NAME", "Akim for 5 Hours API"),
-        app_env=os.getenv("APP_ENV", "local"),
-        debug=_as_bool(os.getenv("APP_DEBUG", "false")),
-        api_v1_prefix=os.getenv("API_V1_PREFIX", "/api/v1"),
-    )
+    return Settings()

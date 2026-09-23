@@ -70,7 +70,7 @@ def test_invalid_scenario_returns_rule_details() -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["code"] == "scenario_validation_error"
+    assert response.json()["error"]["code"] == "scenario_validation_error"
 
 
 def test_unknown_request_fields_are_rejected() -> None:
@@ -79,3 +79,4 @@ def test_unknown_request_fields_are_rejected() -> None:
         json={"decisions": [], "simulation_result": {}},
     )
     assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"

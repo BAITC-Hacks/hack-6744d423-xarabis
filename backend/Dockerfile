@@ -8,8 +8,9 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 CMD ["uvicorn", "city_simulator.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

@@ -1,6 +1,8 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from city_simulator.application.use_cases import (
     GetCatalogUseCase,
@@ -8,6 +10,7 @@ from city_simulator.application.use_cases import (
     ValidateDraftScenarioUseCase,
 )
 from city_simulator.domain.entities import Decision, ScenarioResult
+from city_simulator.infrastructure.database import get_db_session
 from city_simulator.presentation.dependencies import (
     get_catalog_use_case,
     get_simulate_use_case,
@@ -36,7 +39,7 @@ def _to_decisions(payload: DecisionsRequest) -> list[Decision]:
     ]
 
 
-def _to_simulation_response(result: ScenarioResult) -> SimulationResponse:
+def to_simulation_response(result: ScenarioResult) -> SimulationResponse:
     return SimulationResponse(
         dataset_version=result.dataset_version,
         formula_version=result.formula_version,
@@ -93,6 +96,14 @@ def _to_simulation_response(result: ScenarioResult) -> SimulationResponse:
 @router.get("/health", tags=["system"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/ready", tags=["system"])
+async def readiness(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, str]:
+    await session.execute(text("SELECT 1"))
+    return {"status": "ready"}
 
 
 @router.get("/catalog", response_model=CatalogMetadataResponse, tags=["catalog"])
@@ -186,4 +197,4 @@ def simulate(
     payload: DecisionsRequest,
     use_case: Annotated[SimulateScenarioUseCase, Depends(get_simulate_use_case)],
 ) -> SimulationResponse:
-    return _to_simulation_response(use_case.execute(_to_decisions(payload)))
+    return to_simulation_response(use_case.execute(_to_decisions(payload)))

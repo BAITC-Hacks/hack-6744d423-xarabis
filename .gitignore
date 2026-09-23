@@ -2,6 +2,7 @@
 # Keep README files; other Markdown documents stay local.
 *.[mM][dD]
 ![rR][eE][aA][dD][mM][eE].[mM][dD]
+!backend/docs/frontend-integration.md
 # test 
 /demo 
 # .NET

@@ -1,0 +1,43 @@
+{
+  "message": "Объясни сильные стороны и ограничения нашего сценария. Напиши краткое обоснование для жюри.",
+  "history": [{"role":"user","content":"Мы хотим помочь Нуре и улучшить воздух в Сарыарке."}],
+  "context": {
+    "selected_measures": [
+      {"measure_id":"M7","district_id":"nura"},
+      {"measure_id":"M8","district_id":"nura"},
+      {"measure_id":"M10","district_id":"nura"},
+      {"measure_id":"M12","district_id":null},
+      {"measure_id":"M5","district_id":"saryarka"}
+    ],
+    "budget_remaining": 5,
+    "simulation_result": {
+      "score_before":52.55768,"score_after":56.54307,"score_delta":3.98539,
+      "districts":[
+        {"district_id":"esil","indicators_before":{"T1":45,"T2":62,"E1":68,"E2":72,"S1":48,"S2":55,"B1":78,"B2":60,"C1":75,"C2":70},"indicators_after":{"T1":45,"T2":62,"E1":68,"E2":72,"S1":48,"S2":55,"B1":78,"B2":60,"C1":75,"C2":74.375},"score_before":62.99,"score_after":63.4275},
+        {"district_id":"almaty","indicators_before":{"T1":40,"T2":75,"E1":50,"E2":55,"S1":60,"S2":65,"B1":62,"B2":52,"C1":50,"C2":60},"indicators_after":{"T1":40,"T2":75,"E1":50,"E2":55,"S1":60,"S2":65,"B1":62,"B2":52,"C1":50,"C2":64.375},"score_before":57.06,"score_after":57.4975},
+        {"district_id":"saryarka","indicators_before":{"T1":50,"T2":70,"E1":42,"E2":40,"S1":62,"S2":68,"B1":58,"B2":55,"C1":45,"C2":55},"indicators_after":{"T1":50,"T2":70,"E1":42,"E2":48.75,"S1":62,"S2":68,"B1":58,"B2":55,"C1":47.5,"C2":59.375},"score_before":54.65,"score_after":56.3},
+        {"district_id":"baikonur","indicators_before":{"T1":52,"T2":68,"E1":55,"E2":50,"S1":58,"S2":60,"B1":52,"B2":58,"C1":55,"C2":58},"indicators_after":{"T1":52,"T2":68,"E1":55,"E2":50,"S1":58,"S2":60,"B1":52,"B2":58,"C1":55,"C2":62.375},"score_before":56.63,"score_after":57.0675},
+        {"district_id":"nura","indicators_before":{"T1":55,"T2":40,"E1":45,"E2":65,"S1":38,"S2":35,"B1":55,"B2":50,"C1":60,"C2":50},"indicators_after":{"T1":55,"T2":40,"E1":45,"E2":65,"S1":48,"S2":43.75,"B1":67.5,"B2":51.75,"C1":60,"C2":54.375},"score_before":49.18,"score_after":52.9625}
+      ],
+      "critical_before":[
+        {"district_id":"nura","indicator_id":"S1","value":38},
+        {"district_id":"nura","indicator_id":"S2","value":35}
+      ],
+      "critical_after":[],
+      "effects":[
+        {"measure_ids":["M7"],"district_id":"nura","indicator_id":"S1","delta":10,"kind":"direct"},
+        {"measure_ids":["M8"],"district_id":"nura","indicator_id":"S2","delta":8.75,"kind":"direct"},
+        {"measure_ids":["M10"],"district_id":"nura","indicator_id":"B1","delta":10.5,"kind":"direct"},
+        {"measure_ids":["M10"],"district_id":"nura","indicator_id":"B2","delta":1.75,"kind":"direct"},
+        {"measure_ids":["M12"],"district_id":"esil","indicator_id":"C2","delta":4.375,"kind":"direct"},
+        {"measure_ids":["M12"],"district_id":"almaty","indicator_id":"C2","delta":4.375,"kind":"direct"},
+        {"measure_ids":["M12"],"district_id":"saryarka","indicator_id":"C2","delta":4.375,"kind":"direct"},
+        {"measure_ids":["M12"],"district_id":"baikonur","indicator_id":"C2","delta":4.375,"kind":"direct"},
+        {"measure_ids":["M12"],"district_id":"nura","indicator_id":"C2","delta":4.375,"kind":"direct"},
+        {"measure_ids":["M5"],"district_id":"saryarka","indicator_id":"E2","delta":8.75,"kind":"direct"},
+        {"measure_ids":["M5"],"district_id":"saryarka","indicator_id":"C1","delta":2.5,"kind":"direct"},
+        {"measure_ids":["M10","M12"],"district_id":"nura","indicator_id":"B1","delta":2,"kind":"synergy"}
+      ]
+    }
+  }
+}

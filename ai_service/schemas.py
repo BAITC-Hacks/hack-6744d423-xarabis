@@ -3,6 +3,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from .sandbox import SANDBOX_IMPROVEMENTS
+
 DistrictId = Literal['esil', 'almaty', 'saryarka', 'baikonur', 'nura']
 IndicatorId = Literal['T1', 'T2', 'E1', 'E2', 'S1', 'S2', 'B1', 'B2', 'C1', 'C2']
 MeasureId = Literal['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14']
@@ -109,6 +111,72 @@ class ChatRequest(ContractModel):
     message: MessageText
     history: Annotated[list[HistoryMessage], Field(max_length=20)]
     context: CityContext
+
+
+SandboxZoneId = Literal['transport', 'air', 'education']
+SandboxImprovementId = Literal['bus', 'signals', 'park', 'filter', 'school']
+SandboxName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+SandboxDescription = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+class SandboxZone(ContractModel):
+    id: SandboxZoneId
+    name: SandboxName
+    value: IndicatorValue
+    description: SandboxDescription
+
+
+class SandboxImprovement(ContractModel):
+    id: SandboxImprovementId
+    name: SandboxName
+    description: SandboxDescription
+    cost: Annotated[Number, Field(ge=0, le=244)]
+    zone_id: SandboxZoneId
+    gain: IndicatorValue
+
+    @model_validator(mode='after')
+    def require_fixed_game_rules(self):
+        reference = SANDBOX_IMPROVEMENTS[self.id]
+        if any(getattr(self, field) != reference[field] for field in ('cost', 'zone_id', 'gain')):
+            raise ValueError('Improvement must match the fixed sandbox rules')
+        return self
+
+
+class SandboxChange(ContractModel):
+    zone_id: SandboxZoneId
+    before: IndicatorValue
+    after: IndicatorValue
+
+
+class SandboxContext(ContractModel):
+    city_name: Literal['Новый Берег']
+    quarter: Annotated[int, Field(ge=1, le=13)]
+    budget: Annotated[Number, Field(ge=0, le=244)]
+    score: IndicatorValue
+    zones: Annotated[list[SandboxZone], Field(min_length=3, max_length=3)]
+    built: Annotated[list[SandboxImprovementId], Field(max_length=5)]
+    available_improvements: Annotated[list[SandboxImprovement], Field(max_length=5)]
+    last_changes: Annotated[list[SandboxChange], Field(max_length=3)]
+    selected_improvements: Annotated[list[SandboxImprovementId], Field(max_length=3)] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def require_distinct_entries(self):
+        for identifiers in ([zone.id for zone in self.zones], self.built,
+                            [item.id for item in self.available_improvements],
+                            [change.zone_id for change in self.last_changes], self.selected_improvements):
+            if len(set(identifiers)) != len(identifiers):
+                raise ValueError('Sandbox entries must have unique IDs')
+        if set(self.built) & {item.id for item in self.available_improvements}:
+            raise ValueError('Built improvements cannot also be available')
+        if not set(self.selected_improvements) <= {item.id for item in self.available_improvements}:
+            raise ValueError('Pending improvements must be available and not already built')
+        return self
+
+
+class SandboxChatRequest(ContractModel):
+    message: MessageText
+    history: Annotated[list[HistoryMessage], Field(max_length=20)]
+    context: SandboxContext
 
 
 class AnalysisBlock(ContractModel):

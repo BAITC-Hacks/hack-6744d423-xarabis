@@ -8,9 +8,10 @@ from openai import APIError, APIResponseValidationError, APITimeoutError, AsyncO
 from pydantic import ValidationError
 
 from .config import Settings
+from .district_schemas import SandboxV2ChatRequest
 from .errors import AIError
 from .knowledge import build_input, load_instructions
-from .schemas import ChatRequest, ChatResponse
+from .schemas import ChatRequest, ChatResponse, SandboxChatRequest
 from .streaming import AnswerPreview
 
 
@@ -68,14 +69,14 @@ class OpenAIProvider:
                 http_client=http_client,
             )
 
-    async def generate(self, request: ChatRequest) -> ChatResponse:
+    async def generate(self, request: ChatRequest | SandboxChatRequest | SandboxV2ChatRequest) -> ChatResponse:
         if self.client is None:
             raise AIError('ai_not_configured')
         try:
             async with asyncio.timeout(self.settings.timeout_seconds):
                 response = await self.client.responses.create(
                     model=self.settings.model.strip(),
-                    instructions=load_instructions(),
+                    instructions=load_instructions(request),
                     input=build_input(request),
                     text={'format': output_format()},
                     store=False,
@@ -93,7 +94,7 @@ class OpenAIProvider:
         if self.client is not None:
             await self.client.close()
 
-    async def stream(self, request: ChatRequest):
+    async def stream(self, request: ChatRequest | SandboxChatRequest | SandboxV2ChatRequest):
         if self.client is None:
             raise AIError('ai_not_configured')
         upstream = None
@@ -103,7 +104,7 @@ class OpenAIProvider:
             async with asyncio.timeout(self.settings.timeout_seconds):
                 upstream = await self.client.responses.create(
                     model=self.settings.model.strip(),
-                    instructions=load_instructions(), input=build_input(request),
+                    instructions=load_instructions(request), input=build_input(request),
                     text={'format': output_format()}, store=False, stream=True,
                     max_output_tokens=self.settings.max_output_tokens,
                 )

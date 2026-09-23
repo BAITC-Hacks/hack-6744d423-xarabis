@@ -6,16 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
+    "test": "node scripts/check-project-previews.mjs && node --test tests/*.test.mjs",
     "preview": "vite preview",
-    "serve": "node serve.mjs"
+    "serve": "node --env-file-if-exists=.env serve.mjs"
   },
   "dependencies": {
+    "maplibre-gl": "^6.11.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "three": "0.180.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "@types/three": "0.180.0",
     "@vitejs/plugin-react": "^4.4.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"

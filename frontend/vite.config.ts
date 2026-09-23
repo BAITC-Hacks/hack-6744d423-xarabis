@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import type { Connect, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { createReadStream, existsSync, statSync } from "node:fs";
@@ -7,27 +7,30 @@ import { fileURLToPath } from "node:url";
 
 function unityGzipAssets(): Plugin {
   const webRoot = fileURLToPath(new URL(".", import.meta.url));
-  const buildRoot = resolve(webRoot, "public/unity/Build");
+  const unityRoot = resolve(webRoot, "public/unity");
   const contentTypes: Record<string, string> = {
-    "unity.data": "application/octet-stream",
-    "unity.framework.js": "application/javascript",
-    "unity.loader.js": "application/javascript",
-    "unity.wasm": "application/wasm",
+    "Build/unity.data": "application/octet-stream",
+    "Build/unity.framework.js": "application/javascript",
+    "Build/unity.loader.js": "application/javascript",
+    "Build/unity.wasm": "application/wasm",
+    "geo/astana-atlas.json": "application/json; charset=utf-8",
   };
 
   const serveCompressedAsset: Connect.NextHandleFunction = (request, response, next) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-    const prefix = "/unity/Build/";
+    const prefix = "/unity/";
     if (!pathname.startsWith(prefix)) return next();
 
-    const requestedName = decodeURIComponent(pathname.slice(prefix.length));
+    let requestedName: string;
+    try { requestedName = decodeURIComponent(pathname.slice(prefix.length)); }
+    catch { response.statusCode = 400; response.end(); return; }
     const isExplicitGzip = requestedName.endsWith(".gz");
     const sourceName = isExplicitGzip ? requestedName.slice(0, -3) : requestedName;
     if (!Object.hasOwn(contentTypes, sourceName)) return next();
 
-    const rawPath = resolve(buildRoot, sourceName);
+    const rawPath = resolve(unityRoot, sourceName);
     const gzipPath = `${rawPath}.gz`;
-    if (!rawPath.startsWith(`${buildRoot}${sep}`)) return next();
+    if (!rawPath.startsWith(`${unityRoot}${sep}`)) return next();
     const acceptsGzip = /(?:^|,)\s*gzip(?:\s*;[^,]*)?(?:,|$)/i.test(request.headers["accept-encoding"] ?? "");
     const serveGzip = isExplicitGzip || (acceptsGzip && existsSync(gzipPath));
     const filePath = serveGzip ? gzipPath : rawPath;
@@ -54,15 +57,18 @@ function unityGzipAssets(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({mode}) => {
+  const env = {...loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), ''), ...process.env};
+  const proxy = {
+    '/api/v1': {target: env.PYTHON_API_URL ?? 'http://127.0.0.1:8000', changeOrigin: true},
+    '/api/ai': {target: env.AI_API_URL ?? 'http://127.0.0.1:8001', changeOrigin: true, rewrite: (path: string) => path.replace(/^\/api\/ai/, '')},
+  };
+  return {
   plugins: [react(), unityGzipAssets()],
   server: {
     port: 5173,
-    proxy: {
-      "/api/v1": {
-        target: process.env.PYTHON_API_URL ?? "http://127.0.0.1:8000",
-        changeOrigin: true,
-      },
-    },
+    proxy,
   },
+  preview: {proxy},
+  };
 });

@@ -60,6 +60,36 @@ export interface Scenario {
   updated_at: string;
 }
 
+export interface ScenarioPage {
+  items: Scenario[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ConsultantBlock {
+  title: string;
+  explanation: string;
+}
+
+export interface ConsultantResponse {
+  answer: string;
+  strengths: ConsultantBlock[];
+  risks: ConsultantBlock[];
+  recommendations: ConsultantBlock[];
+  follow_up_question: string | null;
+}
+
+export interface ChatMessage {
+  id: UUID;
+  scenario_id: UUID;
+  sequence: number;
+  role: "user" | "assistant";
+  content: string;
+  report: ConsultantResponse | null;
+  created_at: string;
+}
+
 export interface CriticalIndicator {
   district_id: DistrictId;
   indicator_id: IndicatorId;
@@ -133,6 +163,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const body = payload as { error?: { code?: string; message?: string; details?: unknown } } | null;
     throw new ApiRequestError(response.status, body?.error?.code ?? "unknown_error", body?.error?.message ?? `Ошибка API (${response.status})`, body?.error?.details);
   }
+  if (response.status === 204) return undefined as T;
   if (payload === null) throw new ApiRequestError(response.status, "invalid_response", "Сервер вернул ответ не в формате JSON");
   return payload as T;
 }
@@ -143,10 +174,15 @@ export const cityApi = {
   getDistricts: () => request<ApiDistrict[]>("/districts"),
   getMeasures: () => request<ApiMeasure[]>("/measures"),
   createScenario: () => request<Scenario>("/scenarios", { method: "POST" }),
+  listScenarios: (limit = 20, offset = 0) => request<ScenarioPage>(`/scenarios?limit=${limit}&offset=${offset}`),
   getScenario: (id: UUID) => request<Scenario>(`/scenarios/${encodeURIComponent(id)}`),
   validate: (decisions: ApiDecision[], signal?: AbortSignal) => request<DraftValidation>("/scenarios/validate", { method: "POST", body: JSON.stringify({ decisions }), signal }),
   replaceDecisions: (id: UUID, version: number, decisions: ApiDecision[]) => request<Scenario>(`/scenarios/${encodeURIComponent(id)}/decisions`, { method: "PUT", body: JSON.stringify({ expected_version: version, decisions }) }),
   calculate: (id: UUID, version: number) => request<StoredSimulationResult>(`/scenarios/${encodeURIComponent(id)}/calculate`, { method: "POST", body: JSON.stringify({ expected_version: version }) }),
   getCurrentResult: (id: UUID) => request<StoredSimulationResult>(`/scenarios/${encodeURIComponent(id)}/result`),
   getResults: (id: UUID) => request<StoredSimulationResult[]>(`/scenarios/${encodeURIComponent(id)}/results`),
+  resetScenario: (id: UUID, version: number) => request<Scenario>(`/scenarios/${encodeURIComponent(id)}/reset`, { method: "POST", body: JSON.stringify({ expected_version: version }) }),
+  deleteScenario: (id: UUID, version: number) => request<void>(`/scenarios/${encodeURIComponent(id)}?expected_version=${version}`, { method: "DELETE" }),
+  sendChatMessage: (id: UUID, message: string, signal?: AbortSignal) => request<ConsultantResponse>(`/scenarios/${encodeURIComponent(id)}/chat/messages`, { method: "POST", body: JSON.stringify({ message }), signal }),
+  getChatMessages: (id: UUID, signal?: AbortSignal) => request<ChatMessage[]>(`/scenarios/${encodeURIComponent(id)}/chat/messages`, { signal }),
 };

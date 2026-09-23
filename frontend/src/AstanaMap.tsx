@@ -4,16 +4,17 @@ import type { LngLatBoundsLike, Map as MapLibreMap, Marker } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { DistrictId } from "./caseData";
+import { offlineAstanaStyle } from "./offlineAstanaStyle";
 
 maplibregl.setWorkerUrl(workerUrl);
 
 /** One-time OSM Nominatim lookups, 2026-09-23. These are district label points, not legal boundaries. */
-const DISTRICTS: { id: DistrictId; name: string; coordinates: [number, number]; focus: [number, number]; osmRelation: number }[] = [
-  { id: "saryarka", name: "Сарыарка", coordinates: [71.3226517, 51.1988462], focus: [71.370, 51.190], osmRelation: 3486954 },
-  { id: "baikonur", name: "Байконур", coordinates: [71.4580973, 51.2264690], focus: [71.455, 51.192], osmRelation: 8593081 },
-  { id: "almaty", name: "Алматы", coordinates: [71.5473172, 51.1550554], focus: [71.505, 51.158], osmRelation: 3482819 },
-  { id: "nura", name: "Нура", coordinates: [71.3160362, 51.1008961], focus: [71.365, 51.116], osmRelation: 20593940 },
-  { id: "esil", name: "Есиль", coordinates: [71.4106032, 51.0592468], focus: [71.4305, 51.1283], osmRelation: 3479876 },
+const DISTRICTS: { id: DistrictId; name: string; coordinates: [number, number]; focus: [number, number]; localFocus: [number, number]; osmRelation: number }[] = [
+  { id: "saryarka", name: "Сарыарка", coordinates: [71.3226517, 51.1988462], focus: [71.370, 51.190], localFocus: [71.39, 51.19], osmRelation: 3486954 },
+  { id: "baikonur", name: "Байконур", coordinates: [71.4580973, 51.2264690], focus: [71.455, 51.192], localFocus: [71.45, 51.19], osmRelation: 8593081 },
+  { id: "almaty", name: "Алматы", coordinates: [71.5473172, 51.1550554], focus: [71.505, 51.158], localFocus: [71.52, 51.15], osmRelation: 3482819 },
+  { id: "nura", name: "Нура", coordinates: [71.3160362, 51.1008961], focus: [71.365, 51.116], localFocus: [71.35, 51.16], osmRelation: 20593940 },
+  { id: "esil", name: "Есиль", coordinates: [71.4106032, 51.0592468], focus: [71.4305, 51.1283], localFocus: [71.43, 51.11], osmRelation: 3479876 },
 ];
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -29,12 +30,12 @@ function showCity(map: MapLibreMap, animate: boolean) {
   });
 }
 
-function focusDistrict(map: MapLibreMap, district: (typeof DISTRICTS)[number]) {
-  map.flyTo({ center: district.focus, zoom: 14.25, pitch: 58, bearing: -24, duration: 900, essential: true });
+function focusDistrict(map: MapLibreMap, district: (typeof DISTRICTS)[number], local: boolean) {
+  map.flyTo({ center: local ? district.localFocus : district.focus, zoom: local ? 14.65 : 14.25, pitch: 58, bearing: -24, duration: 900, essential: true });
 }
 
-function showCenter(map: MapLibreMap) {
-  map.flyTo({ center: [71.4305, 51.1283], zoom: 15.3, pitch: 62, bearing: -24, duration: 1000, essential: true });
+function showCenter(map: MapLibreMap, local: boolean) {
+  map.flyTo({ center: local ? [71.52, 51.15] : [71.4305, 51.1283], zoom: 15.3, pitch: 62, bearing: -24, duration: 1000, essential: true });
 }
 
 function addBuildingExtrusions(map: MapLibreMap) {
@@ -71,7 +72,7 @@ function addDistrictBoundaries(map: MapLibreMap, selectedDistrict: DistrictId) {
   const firstLabel = map.getStyle().layers.find((layer) => layer.type === "symbol")?.id;
   map.addSource("astana-districts", {
     type: "geojson",
-    data: `${import.meta.env.BASE_URL}data/astana-districts.geojson`,
+    data: `${import.meta.env.BASE_URL}data/astana/districts.geojson`,
   });
   map.addLayer({
     id: "astana-district-fill", type: "fill", source: "astana-districts",
@@ -83,12 +84,12 @@ function addDistrictBoundaries(map: MapLibreMap, selectedDistrict: DistrictId) {
   }, firstLabel);
   map.addLayer({
     id: "astana-selected-fill", type: "fill", source: "astana-districts",
-    filter: ["==", ["get", "id"], selectedDistrict],
+    filter: ["==", ["get", "districtId"], selectedDistrict],
     paint: { "fill-color": "#d6ab58", "fill-opacity": 0.11 },
   }, firstLabel);
   map.addLayer({
     id: "astana-selected-outline", type: "line", source: "astana-districts",
-    filter: ["==", ["get", "id"], selectedDistrict],
+    filter: ["==", ["get", "districtId"], selectedDistrict],
     paint: { "line-color": "#b77c30", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 2, 14, 3], "line-opacity": 0.95 },
   }, firstLabel);
 }
@@ -105,17 +106,19 @@ export function AstanaMap({ selectedDistrict, onSelectDistrict, onFallback }: {
   const onSelectRef = useRef(onSelectDistrict);
   const initialSelectionRef = useRef(true);
   onSelectRef.current = onSelectDistrict;
+  const [sourceMode, setSourceMode] = useState<"online" | "local">("online");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    setStatus("loading");
 
     let map: MapLibreMap;
     try {
       map = new maplibregl.Map({
         container,
-        style: STYLE_URL,
+        style: sourceMode === "online" ? STYLE_URL : offlineAstanaStyle(selectionRef.current),
         center: [71.4305, 51.1283],
         zoom: 10.8,
         pitch: 28,
@@ -133,16 +136,21 @@ export function AstanaMap({ selectedDistrict, onSelectDistrict, onFallback }: {
     map.on("styleimagemissing", ({ id }) => {
       if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
-    const timeout = window.setTimeout(() => setStatus((current) => current === "loading" ? "error" : current), 16000);
+    const timeout = window.setTimeout(() => {
+      if (sourceMode === "online") setSourceMode("local");
+      else setStatus((current) => current === "loading" ? "error" : current);
+    }, 16000);
 
     map.on("load", () => {
-      try { addDistrictBoundaries(map, selectionRef.current); } catch (error) { console.warn("District boundaries unavailable", error); }
-      try { addBuildingExtrusions(map); } catch (error) { console.warn("3D buildings unavailable", error); }
+      if (sourceMode === "online") {
+        try { addDistrictBoundaries(map, selectionRef.current); } catch (error) { console.warn("District boundaries unavailable", error); }
+        try { addBuildingExtrusions(map); } catch (error) { console.warn("3D buildings unavailable", error); }
+      }
       if (map.getLayer("astana-district-fill")) {
         map.on("click", "astana-district-fill", (event) => {
-          const district = DISTRICTS.find((item) => item.id === event.features?.[0]?.properties?.id);
+          const district = DISTRICTS.find((item) => item.id === event.features?.[0]?.properties?.districtId);
           if (!district) return;
-          if (selectionRef.current === district.id) focusDistrict(map, district);
+          if (selectionRef.current === district.id) focusDistrict(map, district, sourceMode === "local");
           onSelectRef.current(district.id);
         });
         map.on("mouseenter", "astana-district-fill", () => { map.getCanvas().style.cursor = "pointer"; });
@@ -163,7 +171,7 @@ export function AstanaMap({ selectedDistrict, onSelectDistrict, onFallback }: {
         element.classList.toggle("is-active", district.id === selectionRef.current);
         element.addEventListener("click", (event) => {
           event.stopPropagation();
-          if (selectionRef.current === district.id) focusDistrict(map, district);
+          if (selectionRef.current === district.id) focusDistrict(map, district, sourceMode === "local");
           onSelectRef.current(district.id);
         });
         const marker = new maplibregl.Marker({ element, anchor: district.id === "esil" || district.id === "almaty" ? "bottom-right" : "bottom" }).setLngLat(district.coordinates).addTo(map);
@@ -181,15 +189,15 @@ export function AstanaMap({ selectedDistrict, onSelectDistrict, onFallback }: {
       mapRef.current = null;
       map.remove();
     };
-  }, []);
+  }, [sourceMode]);
 
   useEffect(() => {
     selectionRef.current = selectedDistrict;
     for (const item of markersRef.current) item.element.classList.toggle("is-active", item.id === selectedDistrict);
     const map = mapRef.current;
     if (map?.getLayer("astana-selected-fill")) {
-      map.setFilter("astana-selected-fill", ["==", ["get", "id"], selectedDistrict]);
-      map.setFilter("astana-selected-outline", ["==", ["get", "id"], selectedDistrict]);
+      map.setFilter("astana-selected-fill", ["==", ["get", "districtId"], selectedDistrict]);
+      map.setFilter("astana-selected-outline", ["==", ["get", "districtId"], selectedDistrict]);
     }
     if (initialSelectionRef.current) {
       initialSelectionRef.current = false;
@@ -197,15 +205,16 @@ export function AstanaMap({ selectedDistrict, onSelectDistrict, onFallback }: {
     }
     const district = DISTRICTS.find((item) => item.id === selectedDistrict);
     if (map && district && status === "ready") {
-      focusDistrict(map, district);
+      focusDistrict(map, district, sourceMode === "local");
     }
   }, [selectedDistrict]);
 
   return <div className="astana-map-shell" role="region" aria-label="Реальная карта Астаны с пятью районами из задания">
     <div ref={containerRef} className="astana-map" />
-    <div className="astana-map-label"><span className="astana-map-live" /> <strong>АСТАНА · РЕАЛЬНАЯ КАРТА</strong><small>OSM / OpenFreeMap · границы районов · 3D-здания</small></div>
-    {status === "ready" && <div className="astana-map-controls"><button type="button" onClick={() => mapRef.current && showCity(mapRef.current, true)}>Весь город</button><button type="button" onClick={() => mapRef.current && showCenter(mapRef.current)}>3D центр</button><span>Районы · улицы · здания</span></div>}
-    {status === "loading" && <div className="astana-map-state" role="status"><strong>Загружаем карту Астаны</strong><span>Дороги, река и здания приходят из открытых картографических данных.</span></div>}
-    {status === "error" && <div className="astana-map-state is-error" role="alert"><strong>Карта временно недоступна</strong><span>Для онлайн-карты нужен интернет. Схема районов работает без него.</span><button type="button" onClick={onFallback}>Открыть схему</button></div>}
+    <div className="astana-map-label"><span className="astana-map-live" /> <strong>АСТАНА · РЕАЛЬНАЯ КАРТА</strong><small>{sourceMode === "online" ? "OSM / OpenFreeMap · актуальные границы · 3D-здания" : "Локальные OSM-слои · здания: демовыборка"}</small></div>
+    {status === "ready" && <div className="astana-map-controls"><button type="button" onClick={() => mapRef.current && showCity(mapRef.current, true)}>Весь город</button><button type="button" onClick={() => mapRef.current && showCenter(mapRef.current, sourceMode === "local")}>3D квартал</button><button type="button" className="astana-source-toggle" onClick={() => setSourceMode((current) => current === "online" ? "local" : "online")}>{sourceMode === "online" ? "Локальная карта" : "Онлайн-карта"}</button></div>}
+    {sourceMode === "local" && <a className="astana-local-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors · ODbL</a>}
+    {status === "loading" && <div className="astana-map-state" role="status"><strong>Загружаем карту Астаны</strong><span>{sourceMode === "online" ? "Улицы и здания приходят из OpenFreeMap. При отсутствии сети откроется локальная карта." : "Открываем локальные районы, дороги, реку, парки и выборку зданий."}</span></div>}
+    {status === "error" && <div className="astana-map-state is-error" role="alert"><strong>Карта временно недоступна</strong><span>Локальные геоданные не загрузились. Схема районов доступна без них.</span><button type="button" onClick={onFallback}>Открыть схему</button></div>}
   </div>;
 }

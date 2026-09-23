@@ -521,7 +521,7 @@ export function App() {
 
       {live && simulator.history.length > 0 && <details className="history-panel"><summary>История расчётов · {simulator.history.length}</summary><div>{simulator.history.map((entry) => <div className="history-row" key={entry.id}><span>Версия {entry.scenario_version} · {new Date(entry.created_at).toLocaleString("ru-RU")}</span><strong>{formatScore(entry.simulation.score_before)} → {formatScore(entry.simulation.score_after)}</strong><small>{formatDelta(entry.simulation.score_delta)}</small></div>)}</div></details>}
 
-      <ConsultantPanel />
+      <ConsultantPanel scenarioId={live ? simulator.scenario?.id ?? null : null} live={live} />
 
       <div className={`toast ${notice ? "visible" : ""}`} role="status" aria-live="polite">{notice}<button onClick={() => setNotice("")} aria-label="Закрыть сообщение"><Glyph name="close" size={15} /></button></div>
       <footer className="app-footer"><span>{live ? "Показатели и меры: Python API · геоподложка OSM" : "Демоданные симуляции · геоподложка OSM"}</span><span>Показатель ниже {threshold} считается критическим</span><span>Горизонт H={horizon} кварталов</span></footer>

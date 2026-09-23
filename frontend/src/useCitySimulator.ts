@@ -96,7 +96,9 @@ async function bootstrap(): Promise<Bootstrap> {
 
 function describeError(error: unknown): string[] {
   if (error instanceof ApiRequestError) {
-    if (error.code === "scenario_validation_error" && Array.isArray(error.details)) return error.details.map(String);
+    if (error.code === "scenario_validation_error" && Array.isArray(error.details)) {
+      return error.details.map((issue: unknown) => issue && typeof issue === "object" && "message" in issue ? String(issue.message) : String(issue));
+    }
     if (error.code === "invalid_request") {
       console.error("Некорректный запрос к City Simulator API", error.details);
       return ["Некорректный запрос к серверу. Обнови страницу или сообщи команде."];

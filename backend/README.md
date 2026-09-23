@@ -57,6 +57,9 @@ docker compose up --build
 
 Swagger UI: <http://127.0.0.1:8000/docs>
 
+Полный контракт и порядок подключения frontend:
+[`docs/frontend-integration.md`](docs/frontend-integration.md).
+
 ## API
 
 | Метод | Путь | Назначение |

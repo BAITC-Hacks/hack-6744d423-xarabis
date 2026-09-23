@@ -18,6 +18,7 @@ class Indicator:
     id: IndicatorCode
     direction: Direction
     name: str
+    scale_description: str
 
 
 @dataclass(frozen=True, slots=True)

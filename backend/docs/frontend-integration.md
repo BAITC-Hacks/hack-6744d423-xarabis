@@ -1,6 +1,6 @@
 # Интеграция frontend с Akim City Simulator API
 
-Статус документа: актуально для backend `0.5.0`.
+Статус документа: актуально для backend `0.6.0`.
 
 Этот документ является рабочим контрактом для frontend. Для подключения основной
 симуляции не требуется читать исходный код backend или самостоятельно воспроизводить
@@ -50,6 +50,11 @@ OpenAPI JSON: http://127.0.0.1:8000/openapi.json
 Health: http://127.0.0.1:8000/api/v1/health
 Readiness: http://127.0.0.1:8000/api/v1/ready
 ```
+
+`/health` подтверждает работу процесса. `/ready` дополнительно проверяет PostgreSQL и
+возвращает `503 {"status":"not_ready"}`, если база временно недоступна. Эти маршруты
+предназначены прежде всего для инфраструктуры; игровой UI не должен считать
+недоступность AI-сервиса ошибкой readiness основного backend.
 
 ### Запросы из браузера
 
@@ -136,6 +141,7 @@ export interface CatalogMetadata {
   budget: number;
   horizon_quarters: number;
   required_decisions: number;
+  max_measures_per_direction: number;
   critical_threshold: number;
 }
 
@@ -143,6 +149,7 @@ export interface Indicator {
   id: IndicatorId;
   direction: Direction;
   name: string;
+  scale_description: string;
   weight: number;
 }
 
@@ -245,6 +252,7 @@ export interface ApiErrorBody {
     code: string;
     message: string;
     details?: unknown;
+    request_id?: string;
   };
 }
 
@@ -294,6 +302,7 @@ frontend-коде. API является источником истины.
   "budget": 100,
   "horizon_quarters": 8,
   "required_decisions": 5,
+  "max_measures_per_direction": 2,
   "critical_threshold": 40.0
 }
 ```
@@ -302,6 +311,7 @@ frontend-коде. API является источником истины.
 
 - `budget` — максимальный бюджет;
 - `required_decisions` — точное количество решений для расчёта;
+- `max_measures_per_direction` — максимум мер одного направления;
 - `horizon_quarters` — горизонт, на котором backend применяет эффекты;
 - `critical_threshold` — значение ниже него считается критическим;
 - версии нужно сохранить вместе с отображаемым результатом для диагностики.
@@ -309,7 +319,8 @@ frontend-коде. API является источником истины.
 ### `GET /indicators`
 
 Возвращает десять показателей. `direction` нужен для группировки, `name` — для UI,
-`weight` — только для объяснения. Frontend не должен пересчитывать Score.
+`scale_description` — для подсказки пользователю о смысле шкалы, `weight` — только
+для объяснения. Frontend не должен пересчитывать Score.
 
 ### `GET /districts`
 
@@ -334,7 +345,7 @@ Backend проверяет следующие правила:
 - в черновике может быть от 0 до 5 мероприятий;
 - одно мероприятие нельзя выбирать дважды, даже для разных районов;
 - суммарная стоимость не может превышать 100;
-- в одном направлении можно выбрать не более 2 мероприятий;
+- в одном направлении можно выбрать не более `max_measures_per_direction` мероприятий;
 - районная мера требует существующий `district_id`;
 - городская мера требует `district_id: null`;
 - `M1` и `M3` несовместимы в любом сочетании районов;
@@ -531,7 +542,10 @@ Content-Type: application/json
     "city_average": 58.08,
     "weakest_district_score": 52.96,
     "districts": [],
-    "critical_before": [],
+    "critical_before": [
+      {"district_id": "nura", "indicator_id": "S1", "value": 38.0},
+      {"district_id": "nura", "indicator_id": "S2", "value": 35.0}
+    ],
     "critical_after": [],
     "effects": []
   }
@@ -543,7 +557,7 @@ Content-Type: application/json
 для читаемости.
 
 Повторный расчёт той же версии идемпотентен: backend возвращает уже сохранённый
-результат. После расчёта `GET /scenarios/{id}` вернёт статус `calculated`.
+результат. После расчёта `GET /scenarios/{scenario_id}` вернёт статус `calculated`.
 
 ### Шаг 6. Получить актуальный результат
 
@@ -620,6 +634,8 @@ Content-Type: application/json
 - основной результат: `score_after`;
 - изменение: `score_delta`, со знаком;
 - исходный результат: `score_before`;
+- средневзвешенный районный балл после мер: `city_average`;
+- балл самого слабого района после мер: `weakest_district_score`;
 - потрачено: `total_cost`;
 - осталось: `remaining_budget`.
 
@@ -722,7 +738,7 @@ HTTP `409`, код `scenario_version_conflict`.
 Алгоритм обработки:
 
 1. остановить текущую операцию;
-2. выполнить `GET /scenarios/{id}`;
+2. выполнить `GET /scenarios/{scenario_id}`;
 3. заменить локальный сценарий свежим объектом;
 4. предупредить пользователя, что сценарий изменился;
 5. не повторять старый `PUT` автоматически, иначе можно затереть более новые данные.
@@ -731,6 +747,20 @@ HTTP `409`, код `scenario_version_conflict`.
 
 Сохраните несохранённый выбор локально, покажите кнопку повторной попытки и не
 переходите на экран результата. Для `calculate` повтор с той же версией безопасен.
+
+Каждый прикладной HTTP-ответ содержит `X-Request-ID`. Сохраняйте его в техническом
+логе и показывайте в раскрываемых деталях ошибки: по этому id backend-разработчик
+найдёт запрос в JSON-логах. Заголовки `X-Request-ID` и `Retry-After` доступны браузеру
+и при прямом CORS-подключении. Frontend может отправить собственный `X-Request-ID`,
+если он содержит не более 64 латинских букв, цифр, точек, `_` или `-`.
+
+Дополнительные инфраструктурные ошибки:
+
+| HTTP | Код | Действие frontend |
+| --- | --- | --- |
+| `413` | `request_too_large` | Не повторять тот же запрос; проверить лишние данные |
+| `429` | `chat_rate_limit_exceeded` | Заблокировать отправку на время из `Retry-After` |
+| `500` | `internal_error` | Показать общий сбой и `request_id`, не технические детали |
 
 ## 10. Минимальный API-клиент
 
@@ -741,20 +771,23 @@ export class ApiRequestError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
+    message: string,
     public readonly details?: unknown,
+    public readonly requestId?: string,
   ) {
-    super(code);
+    super(message);
   }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/json");
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
+    headers,
   });
 
   const payload: unknown =
@@ -764,7 +797,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiRequestError(
       response.status,
       body.error?.code ?? "unknown_error",
+      body.error?.message ?? "Неизвестная ошибка API",
       body.error?.details,
+      response.headers.get("X-Request-ID") ?? body.error?.request_id,
     );
   }
   return payload as T;
@@ -896,6 +931,7 @@ export interface ConsultantResponse {
 
 export interface ConsultantClient {
   sendMessage(message: string): Promise<ConsultantResponse>;
+  listMessages(): Promise<ChatMessage[]>;
 }
 
 export type ChatRole = "user" | "assistant";
@@ -948,6 +984,10 @@ export function createConsultantClient(scenarioId: UUID): ConsultantClient {
           method: "POST",
           body: JSON.stringify({ message }),
         },
+      ),
+    listMessages: () =>
+      request<ChatMessage[]>(
+        `/scenarios/${encodeURIComponent(scenarioId)}/chat/messages`,
       ),
   };
 }
@@ -1032,12 +1072,12 @@ export function createConsultantClient(scenarioId: UUID): ConsultantClient {
 | `POST` | `/api/v1/scenarios/simulate` | Расчёт без сохранения |
 | `POST` | `/api/v1/scenarios` | Создание сценария |
 | `GET` | `/api/v1/scenarios?limit=20&offset=0` | Список сценариев |
-| `GET` | `/api/v1/scenarios/{id}` | Восстановление сценария |
-| `PUT` | `/api/v1/scenarios/{id}/decisions` | Полная замена выбора |
-| `POST` | `/api/v1/scenarios/{id}/reset` | Сброс решений |
-| `DELETE` | `/api/v1/scenarios/{id}?expected_version=N` | Удаление сценария |
-| `POST` | `/api/v1/scenarios/{id}/calculate` | Расчёт и сохранение |
-| `GET` | `/api/v1/scenarios/{id}/result` | Актуальный результат |
-| `GET` | `/api/v1/scenarios/{id}/results` | История результатов |
-| `POST` | `/api/v1/scenarios/{id}/chat/messages` | Отправить сообщение консультанту |
-| `GET` | `/api/v1/scenarios/{id}/chat/messages` | История сообщений консультанта |
+| `GET` | `/api/v1/scenarios/{scenario_id}` | Восстановление сценария |
+| `PUT` | `/api/v1/scenarios/{scenario_id}/decisions` | Полная замена выбора |
+| `POST` | `/api/v1/scenarios/{scenario_id}/reset` | Сброс решений |
+| `DELETE` | `/api/v1/scenarios/{scenario_id}?expected_version=N` | Удаление сценария |
+| `POST` | `/api/v1/scenarios/{scenario_id}/calculate` | Расчёт и сохранение |
+| `GET` | `/api/v1/scenarios/{scenario_id}/result` | Актуальный результат |
+| `GET` | `/api/v1/scenarios/{scenario_id}/results` | История результатов |
+| `POST` | `/api/v1/scenarios/{scenario_id}/chat/messages` | Отправить сообщение консультанту |
+| `GET` | `/api/v1/scenarios/{scenario_id}/chat/messages` | История сообщений консультанта |

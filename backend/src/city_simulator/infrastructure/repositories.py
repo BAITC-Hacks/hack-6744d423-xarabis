@@ -45,6 +45,7 @@ class _IndicatorData(_StrictModel):
     id: IndicatorCode
     direction: Direction
     name: str = Field(min_length=1)
+    scale_description: str = Field(min_length=1)
 
 
 class _DistrictData(_StrictModel):
@@ -200,7 +201,12 @@ class VersionedJsonCityDataRepository(CityDataRepository):
                 indicator_weights=MappingProxyType(dict(data.rules.indicator_weights)),
             ),
             indicators=tuple(
-                Indicator(id=item.id, direction=item.direction, name=item.name)
+                Indicator(
+                    id=item.id,
+                    direction=item.direction,
+                    name=item.name,
+                    scale_description=item.scale_description,
+                )
                 for item in data.indicators
             ),
             districts=tuple(

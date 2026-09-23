@@ -18,6 +18,7 @@ Quality of Life Score. AI не участвует в вычислениях.
 - optimistic locking через версию сценария;
 - структурированные ошибки игровых правил и настраиваемый CORS;
 - доверенная интеграция со сторонним AI-консультантом и история чата;
+- request ID, JSON-логи, безопасные `500`, security headers и лимиты запросов;
 - OpenAPI и автоматические тесты.
 
 ## Архитектура
@@ -46,7 +47,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 alembic upgrade head
-uvicorn city_simulator.main:app --reload
+python -m uvicorn city_simulator.main:app --reload
 ```
 
 Подключение к базе задаётся через `DATABASE_URL`. Пример находится в `.env.example`.
@@ -55,6 +56,15 @@ uvicorn city_simulator.main:app --reload
 Адрес отдельного AI-сервиса задаётся через `AI_SERVICE_URL`, таймаут — через
 `AI_SERVICE_TIMEOUT_SECONDS`. Основной backend сам формирует доверенный контекст и
 не принимает результаты симуляции от браузера.
+Уровень логирования задаётся `LOG_LEVEL`, максимальное тело запроса —
+`MAX_REQUEST_BODY_BYTES`, лимит AI-вопросов на сценарий —
+`AI_CHAT_REQUESTS_PER_MINUTE`.
+
+При `APP_ENV=production` приложение отказывается запускаться с `APP_DEBUG=true`,
+SQLite или wildcard `*` в CORS. Production-образ работает от непривилегированного
+пользователя и исключает `.env`, тесты, локальные БД и виртуальное окружение из
+Docker-контекста. Лимит чата хранится в памяти процесса; при горизонтальном
+масштабировании его следует заменить общим rate limiter на уровне gateway или Redis.
 
 Запуск backend и PostgreSQL через Docker:
 
@@ -136,6 +146,7 @@ Swagger UI: <http://127.0.0.1:8000/docs>
 ```powershell
 .\.venv\Scripts\ruff.exe check src tests
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe scripts\smoke.py --base-url http://127.0.0.1:8000
 ```
 
 Эталонный сценарий из задания имеет стоимость `95` и Score `56.54`.

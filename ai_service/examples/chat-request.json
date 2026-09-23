@@ -1,0 +1,9 @@
+{
+  "message": "Что слабее всего в Нуре и какие мероприятия стоит рассмотреть?",
+  "history": [],
+  "context": {
+    "selected_measures": [],
+    "budget_remaining": 100,
+    "simulation_result": null
+  }
+}

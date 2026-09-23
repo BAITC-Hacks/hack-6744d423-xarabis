@@ -1,58 +1,44 @@
-from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import replace
 
 from city_simulator.domain.entities import (
+    CriticalIndicator,
     Decision,
     District,
     DistrictResult,
-    Measure,
+    EffectTrace,
     ScenarioResult,
+    SimulationDataset,
 )
-from city_simulator.domain.enums import IndicatorCode, MeasureScope
+from city_simulator.domain.enums import ConflictScope, EffectKind, IndicatorCode, MeasureScope
 from city_simulator.domain.exceptions import ScenarioValidationError
 
-INDICATOR_WEIGHTS: dict[IndicatorCode, float] = {
-    IndicatorCode.T1: 0.10,
-    IndicatorCode.T2: 0.10,
-    IndicatorCode.E1: 0.09,
-    IndicatorCode.E2: 0.11,
-    IndicatorCode.S1: 0.11,
-    IndicatorCode.S2: 0.11,
-    IndicatorCode.B1: 0.09,
-    IndicatorCode.B2: 0.09,
-    IndicatorCode.C1: 0.10,
-    IndicatorCode.C2: 0.10,
-}
 
+class DraftScenarioValidator:
+    """Validates a partial selection while a user is building a scenario."""
 
-class ScenarioValidator:
-    def __init__(self, *, budget: int = 100, required_decisions: int = 5) -> None:
-        self.budget = budget
-        self.required_decisions = required_decisions
-
-    def validate(
-        self,
-        decisions: Sequence[Decision],
-        districts: Sequence[District],
-        measures: Sequence[Measure],
-    ) -> None:
+    def validate(self, decisions: Sequence[Decision], dataset: SimulationDataset) -> None:
         errors: list[str] = []
-        district_ids = {district.id for district in districts}
-        measure_by_id = {measure.id: measure for measure in measures}
-        selected_ids = [decision.measure_id.upper() for decision in decisions]
+        rules = dataset.rules
+        normalized_ids = [decision.measure_id.upper() for decision in decisions]
+        measure_by_id = {measure.id: measure for measure in dataset.measures}
+        district_ids = {district.id for district in dataset.districts}
 
-        if len(decisions) != self.required_decisions:
-            errors.append(f"Нужно выбрать ровно {self.required_decisions} мероприятий")
-        if len(selected_ids) != len(set(selected_ids)):
+        if len(decisions) > rules.required_decisions:
+            errors.append(f"Можно выбрать не более {rules.required_decisions} мероприятий")
+        if len(normalized_ids) != len(set(normalized_ids)):
             errors.append("Одно мероприятие нельзя выбирать повторно")
 
-        selected_measures: list[Measure] = []
-        for decision in decisions:
-            measure = measure_by_id.get(decision.measure_id.upper())
+        selected_measures = []
+        decision_by_measure: dict[str, Decision] = {}
+        for decision, measure_id in zip(decisions, normalized_ids, strict=True):
+            measure = measure_by_id.get(measure_id)
             if measure is None:
                 errors.append(f"Неизвестное мероприятие: {decision.measure_id}")
                 continue
             selected_measures.append(measure)
+            decision_by_measure[measure_id] = decision
             if measure.scope is MeasureScope.DISTRICT:
                 if decision.district_id not in district_ids:
                     errors.append(f"Для {measure.id} нужно указать существующий район")
@@ -60,126 +46,230 @@ class ScenarioValidator:
                 errors.append(f"Для городской меры {measure.id} район указывать нельзя")
 
         total_cost = sum(measure.cost for measure in selected_measures)
-        if total_cost > self.budget:
-            errors.append(f"Бюджет превышен: {total_cost} из {self.budget}")
+        if total_cost > rules.budget:
+            errors.append(f"Бюджет превышен: {total_cost} из {rules.budget}")
 
         direction_counts = Counter(measure.direction for measure in selected_measures)
         for direction, count in direction_counts.items():
-            if count > 2:
-                errors.append(f"В направлении '{direction.value}' выбрано больше 2 мероприятий")
+            if count > rules.max_measures_per_direction:
+                errors.append(
+                    f"В направлении '{direction.value}' выбрано больше "
+                    f"{rules.max_measures_per_direction} мероприятий"
+                )
 
-        selected = set(selected_ids)
-        if {"M1", "M3"} <= selected:
-            errors.append("M1 и M3 несовместимы")
-
-        decision_by_measure = {decision.measure_id.upper(): decision for decision in decisions}
-        for first, second in (("M4", "M7"), ("M5", "M13")):
-            if {first, second} <= selected:
-                if (
-                    decision_by_measure[first].district_id
-                    == decision_by_measure[second].district_id
-                ):
-                    errors.append(f"{first} и {second} нельзя применять в одном районе")
+        selected_ids = set(decision_by_measure)
+        for conflict in dataset.incompatibilities:
+            first, second = conflict.measure_ids
+            if not {first, second} <= selected_ids:
+                continue
+            if conflict.scope is ConflictScope.GLOBAL:
+                errors.append(f"{first} и {second} несовместимы")
+            elif decision_by_measure[first].district_id == decision_by_measure[second].district_id:
+                errors.append(f"{first} и {second} нельзя применять в одном районе")
 
         if errors:
             raise ScenarioValidationError(errors)
 
 
-class ScoreCalculator:
-    def __init__(self, *, budget: int = 100, horizon_quarters: int = 8) -> None:
-        self.budget = budget
-        self.horizon_quarters = horizon_quarters
+class CalculationScenarioValidator:
+    """Adds final calculation requirements to the partial-selection rules."""
 
-    @staticmethod
-    def district_score(indicators: Mapping[IndicatorCode, float]) -> float:
-        return sum(INDICATOR_WEIGHTS[code] * indicators[code] for code in INDICATOR_WEIGHTS)
+    def __init__(self, draft_validator: DraftScenarioValidator | None = None) -> None:
+        self._draft_validator = draft_validator or DraftScenarioValidator()
+
+    def validate(self, decisions: Sequence[Decision], dataset: SimulationDataset) -> None:
+        errors: list[str] = []
+        try:
+            self._draft_validator.validate(decisions, dataset)
+        except ScenarioValidationError as exc:
+            errors.extend(exc.errors)
+        if len(decisions) != dataset.rules.required_decisions:
+            errors.insert(0, f"Нужно выбрать ровно {dataset.rules.required_decisions} мероприятий")
+        if errors:
+            raise ScenarioValidationError(errors)
+
+
+class ScoreCalculator:
+    """Pure deterministic simulation engine with an auditable effect trace."""
 
     def calculate(
         self,
         decisions: Sequence[Decision],
-        districts: Sequence[District],
-        measures: Sequence[Measure],
+        dataset: SimulationDataset,
     ) -> ScenarioResult:
-        measure_by_id = {measure.id: measure for measure in measures}
-        updated = {
-            district.id: {code: float(value) for code, value in district.indicators.items()}
-            for district in districts
-        }
+        rules = dataset.rules
+        measure_by_id = {measure.id: measure for measure in dataset.measures}
+        district_by_id = {district.id: district for district in dataset.districts}
+        normalized_decisions = tuple(
+            Decision(item.measure_id.upper(), item.district_id) for item in decisions
+        )
 
-        for decision in decisions:
-            measure = measure_by_id[decision.measure_id.upper()]
-            targets = (
-                districts
+        raw_effects: list[EffectTrace] = []
+        for decision in normalized_decisions:
+            measure = measure_by_id[decision.measure_id]
+            target_ids = (
+                tuple(district_by_id)
                 if measure.scope is MeasureScope.CITY
-                else (next(item for item in districts if item.id == decision.district_id),)
+                else (decision.district_id,)
             )
-            for target in targets:
-                for code, effect in measure.realized_effects(self.horizon_quarters).items():
-                    updated[target.id][code] += effect
+            for district_id in target_ids:
+                if district_id is None:
+                    continue
+                for indicator_id, delta in measure.realized_effects(rules.horizon_quarters).items():
+                    raw_effects.append(
+                        EffectTrace(
+                            measure_ids=(measure.id,),
+                            district_id=district_id,
+                            indicator_id=indicator_id,
+                            delta=delta,
+                            kind=EffectKind.DIRECT,
+                        )
+                    )
 
-        self._apply_synergies(decisions, updated)
+        selected = {item.measure_id: item for item in normalized_decisions}
+        for synergy in dataset.synergies:
+            if not set(synergy.measure_ids) <= set(selected):
+                continue
+            district_id = selected[synergy.target_measure_id].district_id
+            if district_id is not None:
+                raw_effects.append(
+                    EffectTrace(
+                        measure_ids=synergy.measure_ids,
+                        district_id=district_id,
+                        indicator_id=synergy.indicator_id,
+                        delta=synergy.delta,
+                        kind=EffectKind.SYNERGY,
+                    )
+                )
 
-        for values in updated.values():
-            for code in values:
-                values[code] = min(100.0, max(0.0, values[code]))
-
+        effects, updated = self._apply_effects(dataset.districts, raw_effects)
         district_results = tuple(
             DistrictResult(
                 district_id=district.id,
                 district_name=district.name,
-                score_before=self.district_score(district.indicators),
-                score_after=self.district_score(updated[district.id]),
+                score_before=self._district_score(district.indicators, dataset),
+                score_after=self._district_score(updated[district.id], dataset),
                 indicators_before=district.indicators,
                 indicators_after=updated[district.id],
             )
-            for district in districts
+            for district in dataset.districts
         )
-        city_average = sum(
-            district.population_share * result.score_after
-            for district, result in zip(districts, district_results, strict=True)
+        critical_before = self._critical_indicators(
+            ((district.id, district.indicators) for district in dataset.districts), dataset
         )
-        weakest_score = min(result.score_after for result in district_results)
-        critical_count = sum(value < 40 for values in updated.values() for value in values.values())
-        score_after = 0.7 * city_average + 0.3 * weakest_score - critical_count
-        score_before = self._baseline_score(districts)
-        total_cost = sum(measure_by_id[item.measure_id.upper()].cost for item in decisions)
+        critical_after = self._critical_indicators(updated.items(), dataset)
+        score_before, _, _ = self._city_score(
+            dataset.districts,
+            tuple(result.score_before for result in district_results),
+            len(critical_before),
+            dataset,
+        )
+        score_after, city_average, weakest_score = self._city_score(
+            dataset.districts,
+            tuple(result.score_after for result in district_results),
+            len(critical_after),
+            dataset,
+        )
+        total_cost = sum(measure_by_id[item.measure_id].cost for item in normalized_decisions)
 
         return ScenarioResult(
+            dataset_version=dataset.dataset_version,
+            formula_version=dataset.formula_version,
             total_cost=total_cost,
-            remaining_budget=self.budget - total_cost,
+            remaining_budget=rules.budget - total_cost,
             score_before=score_before,
             score_after=score_after,
             score_delta=score_after - score_before,
             city_average=city_average,
             weakest_district_score=weakest_score,
-            critical_indicators_count=critical_count,
             districts=district_results,
+            critical_before=critical_before,
+            critical_after=critical_after,
+            effects=effects,
         )
-
-    def _baseline_score(self, districts: Sequence[District]) -> float:
-        scores = [self.district_score(district.indicators) for district in districts]
-        average = sum(
-            district.population_share * score
-            for district, score in zip(districts, scores, strict=True)
-        )
-        critical = sum(
-            value < 40 for district in districts for value in district.indicators.values()
-        )
-        return 0.7 * average + 0.3 * min(scores) - critical
 
     @staticmethod
-    def _apply_synergies(
-        decisions: Sequence[Decision],
-        updated: dict[str, dict[IndicatorCode, float]],
-    ) -> None:
-        by_measure = {decision.measure_id.upper(): decision for decision in decisions}
-        synergies = (
-            ("M1", "M2", IndicatorCode.T1, 2.0),
-            ("M10", "M12", IndicatorCode.B1, 2.0),
-            ("M5", "M6", IndicatorCode.E2, 2.0),
+    def _apply_effects(
+        districts: Sequence[District],
+        raw_effects: Sequence[EffectTrace],
+    ) -> tuple[tuple[EffectTrace, ...], dict[str, dict[IndicatorCode, float]]]:
+        updated = {
+            district.id: {code: float(value) for code, value in district.indicators.items()}
+            for district in districts
+        }
+        grouped: dict[tuple[str, IndicatorCode], list[int]] = defaultdict(list)
+        for index, effect in enumerate(raw_effects):
+            grouped[(effect.district_id, effect.indicator_id)].append(index)
+
+        normalized_effects = list(raw_effects)
+        for (district_id, indicator_id), indexes in grouped.items():
+            base = updated[district_id][indicator_id]
+            raw_delta = sum(raw_effects[index].delta for index in indexes)
+            final_value = min(100.0, max(0.0, base + raw_delta))
+            applied_delta = final_value - base
+            if raw_delta != 0 and applied_delta != raw_delta:
+                factor = applied_delta / raw_delta
+                for index in indexes:
+                    normalized_effects[index] = replace(
+                        raw_effects[index], delta=raw_effects[index].delta * factor
+                    )
+            updated[district_id][indicator_id] = final_value
+        ordered_effects = tuple(
+            sorted(
+                normalized_effects,
+                key=lambda item: (
+                    item.district_id,
+                    item.indicator_id.value,
+                    item.kind.value,
+                    item.measure_ids,
+                ),
+            )
         )
-        for first, second, indicator, bonus in synergies:
-            if first in by_measure and second in by_measure:
-                district_id = by_measure[first].district_id
-                if district_id is not None:
-                    updated[district_id][indicator] += bonus
+        return ordered_effects, updated
+
+    @staticmethod
+    def _district_score(
+        indicators: Mapping[IndicatorCode, float],
+        dataset: SimulationDataset,
+    ) -> float:
+        return sum(
+            dataset.rules.indicator_weights[code] * indicators[code]
+            for code in dataset.rules.indicator_weights
+        )
+
+    @staticmethod
+    def _critical_indicators(
+        districts: Iterable[tuple[str, Mapping[IndicatorCode, float]]],
+        dataset: SimulationDataset,
+    ) -> tuple[CriticalIndicator, ...]:
+        threshold = dataset.rules.critical_threshold
+        return tuple(
+            CriticalIndicator(
+                district_id=district_id,
+                indicator_id=indicator_id,
+                value=value,
+            )
+            for district_id, indicators in districts
+            for indicator_id, value in indicators.items()
+            if value < threshold
+        )
+
+    @staticmethod
+    def _city_score(
+        districts: Sequence[District],
+        district_scores: Sequence[float],
+        critical_count: int,
+        dataset: SimulationDataset,
+    ) -> tuple[float, float, float]:
+        city_average = sum(
+            district.population_share * score
+            for district, score in zip(districts, district_scores, strict=True)
+        )
+        weakest_score = min(district_scores)
+        rules = dataset.rules
+        score = (
+            rules.city_average_weight * city_average
+            + rules.weakest_district_weight * weakest_score
+            - rules.critical_penalty * critical_count
+        )
+        return score, city_average, weakest_score

@@ -14,6 +14,22 @@ class MeasureScope(StrEnum):
     CITY = "city"
 
 
+class ConflictScope(StrEnum):
+    GLOBAL = "global"
+    SAME_DISTRICT = "same_district"
+
+
+class EffectKind(StrEnum):
+    DIRECT = "direct"
+    SYNERGY = "synergy"
+
+
+class ScenarioStatus(StrEnum):
+    DRAFT = "draft"
+    CALCULATED = "calculated"
+    COMPLETED = "completed"
+
+
 class IndicatorCode(StrEnum):
     T1 = "T1"
     T2 = "T2"

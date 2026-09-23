@@ -1,25 +1,140 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from city_simulator.application.use_cases import GetCatalogUseCase, SimulateScenarioUseCase
-from city_simulator.domain.entities import Decision
-from city_simulator.presentation.dependencies import get_catalog_use_case, get_simulate_use_case
+from city_simulator.application.use_cases import (
+    GetCatalogUseCase,
+    SimulateScenarioUseCase,
+    ValidateDraftScenarioUseCase,
+)
+from city_simulator.domain.entities import Decision, ScenarioResult
+from city_simulator.infrastructure.database import get_db_session
+from city_simulator.presentation.dependencies import (
+    get_catalog_use_case,
+    get_simulate_use_case,
+    get_validate_draft_use_case,
+)
 from city_simulator.presentation.schemas import (
-    AnalysisResponse,
+    CatalogMetadataResponse,
+    CriticalIndicatorResponse,
+    DecisionsRequest,
     DistrictResponse,
     DistrictResultResponse,
+    DraftValidationResponse,
+    EffectResponse,
+    IndicatorResponse,
     MeasureResponse,
-    SimulateRequest,
     SimulationResponse,
 )
 
 router = APIRouter()
 
 
+def _to_decisions(payload: DecisionsRequest) -> list[Decision]:
+    return [
+        Decision(measure_id=item.measure_id.upper(), district_id=item.district_id)
+        for item in payload.decisions
+    ]
+
+
+def to_simulation_response(result: ScenarioResult) -> SimulationResponse:
+    return SimulationResponse(
+        dataset_version=result.dataset_version,
+        formula_version=result.formula_version,
+        total_cost=result.total_cost,
+        remaining_budget=result.remaining_budget,
+        score_before=round(result.score_before, 2),
+        score_after=round(result.score_after, 2),
+        score_delta=round(result.score_delta, 2),
+        city_average=round(result.city_average, 2),
+        weakest_district_score=round(result.weakest_district_score, 2),
+        districts=[
+            DistrictResultResponse(
+                district_id=item.district_id,
+                score_before=round(item.score_before, 2),
+                score_after=round(item.score_after, 2),
+                indicators_before={
+                    code.value: value for code, value in item.indicators_before.items()
+                },
+                indicators_after={
+                    code.value: round(value, 4) for code, value in item.indicators_after.items()
+                },
+            )
+            for item in result.districts
+        ],
+        critical_before=[
+            CriticalIndicatorResponse(
+                district_id=item.district_id,
+                indicator_id=item.indicator_id.value,
+                value=round(item.value, 4),
+            )
+            for item in result.critical_before
+        ],
+        critical_after=[
+            CriticalIndicatorResponse(
+                district_id=item.district_id,
+                indicator_id=item.indicator_id.value,
+                value=round(item.value, 4),
+            )
+            for item in result.critical_after
+        ],
+        effects=[
+            EffectResponse(
+                measure_ids=list(item.measure_ids),
+                district_id=item.district_id,
+                indicator_id=item.indicator_id.value,
+                delta=round(item.delta, 4),
+                kind=item.kind,
+            )
+            for item in result.effects
+        ],
+    )
+
+
 @router.get("/health", tags=["system"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/ready", tags=["system"])
+async def readiness(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, str]:
+    await session.execute(text("SELECT 1"))
+    return {"status": "ready"}
+
+
+@router.get("/catalog", response_model=CatalogMetadataResponse, tags=["catalog"])
+def get_catalog(
+    use_case: Annotated[GetCatalogUseCase, Depends(get_catalog_use_case)],
+) -> CatalogMetadataResponse:
+    dataset = use_case.dataset()
+    return CatalogMetadataResponse(
+        dataset_version=dataset.dataset_version,
+        formula_version=dataset.formula_version,
+        budget=dataset.rules.budget,
+        horizon_quarters=dataset.rules.horizon_quarters,
+        required_decisions=dataset.rules.required_decisions,
+        critical_threshold=dataset.rules.critical_threshold,
+    )
+
+
+@router.get("/indicators", response_model=list[IndicatorResponse], tags=["catalog"])
+def list_indicators(
+    use_case: Annotated[GetCatalogUseCase, Depends(get_catalog_use_case)],
+) -> list[IndicatorResponse]:
+    dataset = use_case.dataset()
+    return [
+        IndicatorResponse(
+            id=item.id.value,
+            direction=item.direction,
+            name=item.name,
+            weight=dataset.rules.indicator_weights[item.id],
+        )
+        for item in dataset.indicators
+    ]
 
 
 @router.get("/districts", response_model=list[DistrictResponse], tags=["catalog"])
@@ -34,7 +149,7 @@ def list_districts(
             profile=item.profile,
             indicators={code.value: value for code, value in item.indicators.items()},
         )
-        for item in use_case.districts()
+        for item in use_case.dataset().districts
     ]
 
 
@@ -52,55 +167,34 @@ def list_measures(
             lag_quarters=item.lag_quarters,
             effects={code.value: value for code, value in item.effects.items()},
         )
-        for item in use_case.measures()
+        for item in use_case.dataset().measures
     ]
+
+
+@router.post(
+    "/scenarios/validate",
+    response_model=DraftValidationResponse,
+    tags=["simulation"],
+)
+def validate_draft(
+    payload: DecisionsRequest,
+    use_case: Annotated[
+        ValidateDraftScenarioUseCase,
+        Depends(get_validate_draft_use_case),
+    ],
+) -> DraftValidationResponse:
+    result = use_case.execute(_to_decisions(payload))
+    return DraftValidationResponse(
+        decision_count=result.decision_count,
+        total_cost=result.total_cost,
+        remaining_budget=result.remaining_budget,
+        ready_for_calculation=result.ready_for_calculation,
+    )
 
 
 @router.post("/scenarios/simulate", response_model=SimulationResponse, tags=["simulation"])
 def simulate(
-    payload: SimulateRequest,
+    payload: DecisionsRequest,
     use_case: Annotated[SimulateScenarioUseCase, Depends(get_simulate_use_case)],
 ) -> SimulationResponse:
-    output = use_case.execute(
-        [
-            Decision(measure_id=item.measure_id.upper(), district_id=item.district_id)
-            for item in payload.decisions
-        ]
-    )
-    result = output.result
-    return SimulationResponse(
-        total_cost=result.total_cost,
-        remaining_budget=result.remaining_budget,
-        score_before=round(result.score_before, 2),
-        score_after=round(result.score_after, 2),
-        score_delta=round(result.score_delta, 2),
-        city_average=round(result.city_average, 2),
-        weakest_district_score=round(result.weakest_district_score, 2),
-        critical_indicators_count=result.critical_indicators_count,
-        districts=[
-            DistrictResultResponse(
-                district_id=item.district_id,
-                district_name=item.district_name,
-                score_before=round(item.score_before, 2),
-                score_after=round(item.score_after, 2),
-                score_delta=round(item.score_after - item.score_before, 2),
-                indicators_before={
-                    code.value: value for code, value in item.indicators_before.items()
-                },
-                indicators_after={
-                    code.value: round(value, 2) for code, value in item.indicators_after.items()
-                },
-                indicator_deltas={
-                    code.value: round(item.indicators_after[code] - before, 2)
-                    for code, before in item.indicators_before.items()
-                },
-            )
-            for item in result.districts
-        ],
-        analysis=AnalysisResponse(
-            summary=output.analysis.summary,
-            strengths=list(output.analysis.strengths),
-            risks=list(output.analysis.risks),
-            recommendations=list(output.analysis.recommendations),
-        ),
-    )
+    return to_simulation_response(use_case.execute(_to_decisions(payload)))

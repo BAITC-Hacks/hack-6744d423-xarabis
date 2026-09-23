@@ -1,62 +1,118 @@
+from dataclasses import replace
+from types import MappingProxyType
+
 import pytest
 
 from city_simulator.domain.entities import Decision
-from city_simulator.domain.exceptions import ScenarioValidationError
-from city_simulator.domain.services import ScenarioValidator, ScoreCalculator
-from city_simulator.infrastructure.repositories import DISTRICTS, MEASURES
-
-EXAMPLE_DECISIONS = (
-    Decision("M7", "nura"),
-    Decision("M8", "nura"),
-    Decision("M10", "nura"),
-    Decision("M12"),
-    Decision("M5", "saryarka"),
-)
+from city_simulator.domain.enums import EffectKind, IndicatorCode
+from city_simulator.domain.services import CalculationScenarioValidator, ScoreCalculator
 
 
-def test_baseline_score_matches_dataset() -> None:
-    result = ScoreCalculator().calculate((), DISTRICTS, MEASURES)
+def test_baseline_score_matches_dataset(dataset) -> None:
+    result = ScoreCalculator().calculate((), dataset)
     assert result.score_before == pytest.approx(52.56, abs=0.01)
     assert result.score_after == pytest.approx(52.56, abs=0.01)
+    assert len(result.critical_before) == 2
+    assert result.critical_before == result.critical_after
 
 
-def test_example_scenario_is_valid_and_improves_score() -> None:
-    ScenarioValidator().validate(EXAMPLE_DECISIONS, DISTRICTS, MEASURES)
-    result = ScoreCalculator().calculate(EXAMPLE_DECISIONS, DISTRICTS, MEASURES)
+def test_example_scenario_matches_document(dataset, example_decisions) -> None:
+    CalculationScenarioValidator().validate(example_decisions, dataset)
+    result = ScoreCalculator().calculate(example_decisions, dataset)
 
     assert result.total_cost == 95
     assert result.remaining_budget == 5
     assert result.score_after == pytest.approx(56.54, abs=0.01)
-    assert result.score_delta > 0
-    assert result.critical_indicators_count == 0
+    assert result.score_delta == pytest.approx(3.98, abs=0.01)
+    assert result.critical_after == ()
+    assert any(
+        effect.kind is EffectKind.SYNERGY
+        and effect.measure_ids == ("M10", "M12")
+        and effect.district_id == "nura"
+        and effect.delta == 2
+        for effect in result.effects
+    )
+    for district in result.districts:
+        assert all(0 <= value <= 100 for value in district.indicators_after.values())
+        for indicator_id, before in district.indicators_before.items():
+            traced_delta = sum(
+                effect.delta
+                for effect in result.effects
+                if effect.district_id == district.district_id
+                and effect.indicator_id is indicator_id
+            )
+            assert district.indicators_after[indicator_id] - before == pytest.approx(traced_delta)
 
 
-def test_validator_rejects_budget_and_duplicate_measure() -> None:
-    invalid = (
-        Decision("M3", "yesil"),
-        Decision("M3", "nura"),
-        Decision("M7", "nura"),
-        Decision("M8", "nura"),
-        Decision("M13", "almaty"),
+def test_lag_scales_a_district_effect(dataset) -> None:
+    result = ScoreCalculator().calculate((Decision("M1", "esil"),), dataset)
+    esil = next(item for item in result.districts if item.district_id == "esil")
+    assert esil.indicators_after[IndicatorCode.T1] == pytest.approx(49.5)
+    assert esil.indicators_after[IndicatorCode.T2] == pytest.approx(68.75)
+
+
+def test_city_measure_affects_every_district(dataset) -> None:
+    result = ScoreCalculator().calculate((Decision("M12"),), dataset)
+    for district in result.districts:
+        assert (
+            district.indicators_after[IndicatorCode.C2]
+            - district.indicators_before[IndicatorCode.C2]
+        ) == pytest.approx(4.375)
+
+
+def test_synergy_is_fixed_and_not_scaled_by_lag(dataset) -> None:
+    result = ScoreCalculator().calculate(
+        (Decision("M10", "nura"), Decision("M12")),
+        dataset,
+    )
+    nura = next(item for item in result.districts if item.district_id == "nura")
+    assert nura.indicators_after[IndicatorCode.B1] == pytest.approx(67.5)
+
+
+def test_clipping_is_reflected_in_effect_trace(dataset) -> None:
+    esil = dataset.get_district("esil")
+    assert esil is not None
+    indicators = dict(esil.indicators)
+    indicators[IndicatorCode.T1] = 99
+    modified_esil = replace(esil, indicators=MappingProxyType(indicators))
+    modified_dataset = replace(
+        dataset,
+        districts=(modified_esil, *dataset.districts[1:]),
     )
 
-    with pytest.raises(ScenarioValidationError) as error:
-        ScenarioValidator().validate(invalid, DISTRICTS, MEASURES)
+    result = ScoreCalculator().calculate((Decision("M1", "esil"),), modified_dataset)
+    esil_result = result.districts[0]
+    t1_effect = next(
+        item
+        for item in result.effects
+        if item.district_id == "esil" and item.indicator_id is IndicatorCode.T1
+    )
+    assert esil_result.indicators_after[IndicatorCode.T1] == 100
+    assert t1_effect.delta == pytest.approx(1.0)
 
-    assert any("повторно" in item for item in error.value.errors)
-    assert any("Бюджет превышен" in item for item in error.value.errors)
+
+def test_decision_order_does_not_change_result(dataset, example_decisions) -> None:
+    calculator = ScoreCalculator()
+    forward = calculator.calculate(example_decisions, dataset)
+    backward = calculator.calculate(tuple(reversed(example_decisions)), dataset)
+    assert forward.score_after == backward.score_after
+    assert [item.indicators_after for item in forward.districts] == [
+        item.indicators_after for item in backward.districts
+    ]
+    assert forward.effects == backward.effects
 
 
-def test_validator_rejects_district_for_city_measure() -> None:
-    invalid = (
+def test_different_valid_decisions_change_score(dataset, example_decisions) -> None:
+    alternative = (
         Decision("M9", "nura"),
-        Decision("M10", "nura"),
-        Decision("M11", "yesil"),
-        Decision("M12", "nura"),
+        Decision("M11", "esil"),
+        Decision("M10", "almaty"),
+        Decision("M12"),
         Decision("M4", "saryarka"),
     )
-
-    with pytest.raises(ScenarioValidationError) as error:
-        ScenarioValidator().validate(invalid, DISTRICTS, MEASURES)
-
-    assert any("городской меры M12" in item for item in error.value.errors)
+    CalculationScenarioValidator().validate(alternative, dataset)
+    calculator = ScoreCalculator()
+    assert (
+        calculator.calculate(alternative, dataset).score_after
+        != calculator.calculate(example_decisions, dataset).score_after
+    )

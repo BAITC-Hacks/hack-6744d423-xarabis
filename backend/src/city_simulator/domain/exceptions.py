@@ -49,3 +49,9 @@ class SimulationResultNotFoundError(DomainError):
     def __init__(self, scenario_id: object) -> None:
         self.scenario_id = scenario_id
         super().__init__(f"Для текущей версии сценария {scenario_id} расчёт отсутствует")
+
+
+class ConsultantServiceError(DomainError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)

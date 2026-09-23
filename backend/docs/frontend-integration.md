@@ -1,6 +1,6 @@
 # Интеграция frontend с Akim City Simulator API
 
-Статус документа: актуально для backend `0.4.0`.
+Статус документа: актуально для backend `0.5.0`.
 
 Этот документ является рабочим контрактом для frontend. Для подключения основной
 симуляции не требуется читать исходный код backend или самостоятельно воспроизводить
@@ -23,7 +23,7 @@
 
 - авторизация и пользователи;
 - завершение сценария;
-- маршруты основного backend для чата с AI-консультантом;
+- streaming-прокси для постепенного текста AI-консультанта.
 
 Это не мешает собрать основной экран симуляции. API уже поддерживает пагинированный
 список, сброс и удаление сценариев.
@@ -875,14 +875,8 @@ AI-консультант является отдельным сервисом �
 - ключ AI-провайдера и межсервисное взаимодействие не попадают в браузер;
 - frontend только отправляет сообщение основному backend и отображает ответ.
 
-В текущей версии основного backend chat-маршруты ещё отсутствуют. Поэтому frontend
-сейчас должен:
-
-1. реализовать компоненты чата отдельно от HTTP-клиента;
-2. описать интерфейс `ConsultantClient`;
-3. использовать mock-реализацию для вёрстки;
-4. не обращаться напрямую к AI-сервису;
-5. заменить mock на backend-адаптер после публикации chat-endpoint’ов.
+Основной backend предоставляет обычный запрос с целым проверенным ответом и историю
+сообщений. Streaming появится отдельно; текущий маршрут не передаёт частичный текст.
 
 Рекомендуемый интерфейс UI:
 
@@ -903,6 +897,60 @@ export interface ConsultantResponse {
 export interface ConsultantClient {
   sendMessage(message: string): Promise<ConsultantResponse>;
 }
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatMessage {
+  id: UUID;
+  scenario_id: UUID;
+  sequence: number;
+  role: ChatRole;
+  content: string;
+  report: ConsultantResponse | null;
+  created_at: ISODateTime;
+}
+```
+
+Отправка сообщения:
+
+```http
+POST /api/v1/scenarios/{scenario_id}/chat/messages
+Content-Type: application/json
+
+{"message":"Какие риски у моего плана?"}
+```
+
+Успех `200` возвращает `ConsultantResponse` без дополнительной обёртки. Frontend не
+передаёт историю, выбранные мероприятия, бюджет или результат расчёта. Backend берёт
+их из PostgreSQL, передаёт стороннему сервису и сохраняет пару сообщений только после
+получения валидного полного ответа.
+
+История:
+
+```http
+GET /api/v1/scenarios/{scenario_id}/chat/messages
+```
+
+Ответ — `ChatMessage[]` в хронологическом порядке. У пользовательского сообщения
+`report` равен `null`; у сообщения ассистента `report` содержит полный
+структурированный ответ, а `content` — его текстовое представление для следующего
+запроса к AI.
+
+Готовый адаптер вместо mock:
+
+```ts
+export function createConsultantClient(scenarioId: UUID): ConsultantClient {
+  return {
+    sendMessage: (message: string) =>
+      request<ConsultantResponse>(
+        `/scenarios/${encodeURIComponent(scenarioId)}/chat/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({ message }),
+        },
+      ),
+  };
+}
 ```
 
 Отображение ответа:
@@ -914,10 +962,14 @@ export interface ConsultantClient {
 - предусмотреть ожидание до 45 секунд, ошибку и ручной retry;
 - не придумывать успешный ответ при сбое AI.
 
-После реализации chat-маршрута основной backend сам возьмёт текущие
-`scenario.decisions`, остаток бюджета и актуальный `simulation` и передаст их
-консультанту. Frontend не должен вручную собирать или изменять этот доверенный
-контекст.
+Возможные коды ошибок: `ai_not_configured`, `ai_unavailable`, `ai_timeout`,
+`invalid_ai_response`, `ai_refusal`, `ai_contract_mismatch`. При ошибке сообщение не
+считается успешно сохранённым. Retry выполняется только по явному действию
+пользователя.
+
+После изменения решений backend автоматически передаёт
+`simulation_result: null`, пока новая версия не рассчитана. Frontend не должен
+вручную собирать или изменять этот доверенный контекст.
 
 ## 13. Порядок реализации frontend
 
@@ -935,8 +987,8 @@ export interface ConsultantClient {
 10. Реализовать расчёт и экран результата.
 11. Реализовать сравнение районов и показателей до/после.
 12. Реализовать историю результатов.
-13. Сделать UI чата через `ConsultantClient` и mock, не вызывая AI напрямую.
-14. После появления маршрутов чата заменить только адаптер, не компоненты UI.
+13. Подключить `ConsultantClient` к маршруту сценария и убрать mock-badge.
+14. Загружать сохранённую историю чата при открытии сценария.
 
 ## 14. Критерии готовности frontend-интеграции
 
@@ -961,8 +1013,10 @@ export interface ConsultantClient {
 - пустые списки критических значений и AI-блоков отображаются как нормальное
   состояние;
 - frontend не пересчитывает Score;
-- frontend не обращается к AI-сервису напрямую.
+- frontend не обращается к AI-сервису напрямую;
 - удаление и сброс требуют подтверждения и актуальной версии сценария;
+- чат отправляет только `message`, а контекст формирует backend;
+- история чата восстанавливается после обновления страницы.
 
 ## 15. Карта API
 
@@ -985,3 +1039,5 @@ export interface ConsultantClient {
 | `POST` | `/api/v1/scenarios/{id}/calculate` | Расчёт и сохранение |
 | `GET` | `/api/v1/scenarios/{id}/result` | Актуальный результат |
 | `GET` | `/api/v1/scenarios/{id}/results` | История результатов |
+| `POST` | `/api/v1/scenarios/{id}/chat/messages` | Отправить сообщение консультанту |
+| `GET` | `/api/v1/scenarios/{id}/chat/messages` | История сообщений консультанта |

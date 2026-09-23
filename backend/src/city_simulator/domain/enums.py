@@ -30,6 +30,11 @@ class ScenarioStatus(StrEnum):
     COMPLETED = "completed"
 
 
+class ChatRole(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
 class IndicatorCode(StrEnum):
     T1 = "T1"
     T2 = "T2"

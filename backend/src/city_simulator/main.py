@@ -8,21 +8,26 @@ from fastapi.responses import JSONResponse
 
 from city_simulator.core.config import get_settings
 from city_simulator.domain.exceptions import (
+    ConsultantServiceError,
     ScenarioNotFoundError,
     ScenarioValidationError,
     ScenarioVersionConflictError,
     SimulationResultNotFoundError,
 )
 from city_simulator.infrastructure.database import dispose_engine
-from city_simulator.presentation.dependencies import get_repository
+from city_simulator.presentation.chat_routes import router as chat_router
+from city_simulator.presentation.dependencies import close_consultant_gateway, get_repository
 from city_simulator.presentation.routes import router
 from city_simulator.presentation.scenario_routes import router as scenario_router
 
 
 @asynccontextmanager
 async def lifespan(_application: FastAPI):
-    yield
-    await dispose_engine()
+    try:
+        yield
+    finally:
+        await close_consultant_gateway()
+        await dispose_engine()
 
 
 def create_app() -> FastAPI:
@@ -31,7 +36,7 @@ def create_app() -> FastAPI:
     get_repository().get_dataset()
     application = FastAPI(
         title=settings.app_name,
-        version="0.4.0",
+        version="0.5.0",
         description="API симулятора управления районами Астаны.",
         debug=settings.app_debug,
         lifespan=lifespan,
@@ -136,12 +141,35 @@ def create_app() -> FastAPI:
             },
         )
 
+    @application.exception_handler(ConsultantServiceError)
+    async def consultant_error_handler(
+        _request: Request,
+        exc: ConsultantServiceError,
+    ) -> JSONResponse:
+        errors = {
+            "ai_not_configured": (503, "AI-консультант не настроен"),
+            "ai_unavailable": (503, "AI-консультант временно недоступен"),
+            "ai_timeout": (504, "Превышено время ожидания ответа AI-консультанта"),
+            "invalid_ai_response": (502, "AI-консультант вернул некорректный ответ"),
+            "ai_refusal": (502, "AI-консультант отказался формировать ответ"),
+            "ai_contract_mismatch": (502, "Нарушен контракт с AI-сервисом"),
+        }
+        status_code, message = errors.get(
+            exc.code,
+            (503, "AI-консультант временно недоступен"),
+        )
+        return JSONResponse(
+            status_code=status_code,
+            content={"error": {"code": exc.code, "message": message}},
+        )
+
     @application.get("/", include_in_schema=False)
     def root() -> dict[str, str]:
         return {"service": settings.app_name, "docs": "/docs"}
 
     application.include_router(router, prefix=settings.api_v1_prefix)
     application.include_router(scenario_router, prefix=settings.api_v1_prefix)
+    application.include_router(chat_router, prefix=settings.api_v1_prefix)
     return application
 
 

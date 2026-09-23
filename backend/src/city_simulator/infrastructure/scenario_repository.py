@@ -16,6 +16,8 @@ from city_simulator.domain.exceptions import (
 from city_simulator.domain.scenario_ports import ScenarioRepository
 from city_simulator.domain.scenarios import Scenario, StoredSimulationResult
 from city_simulator.infrastructure.models import (
+    ChatConversationModel,
+    ChatMessageModel,
     ScenarioDecisionModel,
     ScenarioModel,
     SimulationResultModel,
@@ -196,6 +198,19 @@ class SqlAlchemyScenarioRepository(ScenarioRepository):
         await self._session.execute(
             delete(SimulationResultModel).where(
                 SimulationResultModel.scenario_id == scenario_id
+            )
+        )
+        conversation_ids = select(ChatConversationModel.id).where(
+            ChatConversationModel.scenario_id == scenario_id
+        )
+        await self._session.execute(
+            delete(ChatMessageModel).where(
+                ChatMessageModel.conversation_id.in_(conversation_ids)
+            )
+        )
+        await self._session.execute(
+            delete(ChatConversationModel).where(
+                ChatConversationModel.scenario_id == scenario_id
             )
         )
         await self._session.commit()

@@ -104,9 +104,10 @@ def test_unknown_request_fields_are_rejected() -> None:
 
 def test_openapi_describes_frontend_integration_contract() -> None:
     schema = client.get("/openapi.json").json()
-    assert schema["info"]["version"] == "0.4.0"
+    assert schema["info"]["version"] == "0.5.0"
     paths = schema["paths"]
     assert "get" in paths["/api/v1/scenarios"]
     assert "post" in paths["/api/v1/scenarios/{scenario_id}/reset"]
     assert "delete" in paths["/api/v1/scenarios/{scenario_id}"]
+    assert "post" in paths["/api/v1/scenarios/{scenario_id}/chat/messages"]
     assert "409" in paths["/api/v1/scenarios/{scenario_id}/decisions"]["put"]["responses"]

@@ -4,6 +4,8 @@ services:
     environment:
       DATABASE_URL: >-
         postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://host.docker.internal:8001}
+      AI_SERVICE_TIMEOUT_SECONDS: ${AI_SERVICE_TIMEOUT_SECONDS:-45}
     command: >-
       sh -c "alembic upgrade head &&
       uvicorn city_simulator.main:app --host 0.0.0.0 --port 8000"
@@ -12,6 +14,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   postgres:
     image: postgres:16-alpine

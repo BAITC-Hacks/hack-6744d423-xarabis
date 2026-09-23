@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     func,
@@ -110,3 +111,68 @@ class SimulationResultModel(Base):
     )
 
     scenario: Mapped[ScenarioModel] = relationship(back_populates="results")
+
+
+class ChatConversationModel(Base):
+    __tablename__ = "chat_conversations"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    scenario_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("scenarios.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    next_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    messages: Mapped[list["ChatMessageModel"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ChatMessageModel.sequence",
+    )
+
+
+class ChatMessageModel(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            name="uq_chat_message_conversation_sequence",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    conversation_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("chat_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    report: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    conversation: Mapped[ChatConversationModel] = relationship(back_populates="messages")

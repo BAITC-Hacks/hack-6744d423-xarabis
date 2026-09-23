@@ -1,7 +1,9 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from city_simulator.application.use_cases import (
@@ -24,12 +26,17 @@ from city_simulator.presentation.schemas import (
     DistrictResultResponse,
     DraftValidationResponse,
     EffectResponse,
+    ErrorResponse,
     IndicatorResponse,
     MeasureResponse,
     SimulationResponse,
 )
 
 router = APIRouter()
+
+VALIDATION_ERROR_RESPONSE = {
+    422: {"model": ErrorResponse, "description": "Невалидный запрос или сценарий"}
+}
 
 
 def _to_decisions(payload: DecisionsRequest) -> list[Decision]:
@@ -98,11 +105,19 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/ready", tags=["system"])
+@router.get(
+    "/ready",
+    tags=["system"],
+    response_model=None,
+    responses={503: {"description": "PostgreSQL недоступен"}},
+)
 async def readiness(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> dict[str, str]:
-    await session.execute(text("SELECT 1"))
+) -> dict[str, str] | JSONResponse:
+    try:
+        await session.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
     return {"status": "ready"}
 
 
@@ -117,6 +132,7 @@ def get_catalog(
         budget=dataset.rules.budget,
         horizon_quarters=dataset.rules.horizon_quarters,
         required_decisions=dataset.rules.required_decisions,
+        max_measures_per_direction=dataset.rules.max_measures_per_direction,
         critical_threshold=dataset.rules.critical_threshold,
     )
 
@@ -131,6 +147,7 @@ def list_indicators(
             id=item.id.value,
             direction=item.direction,
             name=item.name,
+            scale_description=item.scale_description,
             weight=dataset.rules.indicator_weights[item.id],
         )
         for item in dataset.indicators
@@ -174,6 +191,7 @@ def list_measures(
 @router.post(
     "/scenarios/validate",
     response_model=DraftValidationResponse,
+    responses=VALIDATION_ERROR_RESPONSE,
     tags=["simulation"],
 )
 def validate_draft(
@@ -192,7 +210,12 @@ def validate_draft(
     )
 
 
-@router.post("/scenarios/simulate", response_model=SimulationResponse, tags=["simulation"])
+@router.post(
+    "/scenarios/simulate",
+    response_model=SimulationResponse,
+    responses=VALIDATION_ERROR_RESPONSE,
+    tags=["simulation"],
+)
 def simulate(
     payload: DecisionsRequest,
     use_case: Annotated[SimulateScenarioUseCase, Depends(get_simulate_use_case)],

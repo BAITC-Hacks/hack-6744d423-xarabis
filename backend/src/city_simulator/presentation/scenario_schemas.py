@@ -23,12 +23,23 @@ class ScenarioResponse(StrictModel):
     updated_at: datetime
 
 
+class ScenarioPageResponse(StrictModel):
+    items: list[ScenarioResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class ReplaceDecisionsRequest(StrictModel):
     expected_version: Annotated[int, Field(ge=1)]
-    decisions: Annotated[list[DecisionRequest], Field(max_length=5)]
+    decisions: list[DecisionRequest]
 
 
 class CalculateScenarioRequest(StrictModel):
+    expected_version: Annotated[int, Field(ge=1)]
+
+
+class ResetScenarioRequest(StrictModel):
     expected_version: Annotated[int, Field(ge=1)]
 
 

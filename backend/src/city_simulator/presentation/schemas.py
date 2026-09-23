@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,7 +18,7 @@ class DecisionRequest(StrictModel):
 
 
 class DecisionsRequest(StrictModel):
-    decisions: Annotated[list[DecisionRequest], Field(max_length=5)]
+    decisions: list[DecisionRequest]
 
 
 class CatalogMetadataResponse(BaseModel):
@@ -27,6 +27,7 @@ class CatalogMetadataResponse(BaseModel):
     budget: int
     horizon_quarters: int
     required_decisions: int
+    max_measures_per_direction: int
     critical_threshold: float
 
 
@@ -34,6 +35,7 @@ class IndicatorResponse(BaseModel):
     id: str
     direction: Direction
     name: str
+    scale_description: str
     weight: float
 
 
@@ -101,6 +103,18 @@ class SimulationResponse(BaseModel):
     effects: list[EffectResponse]
 
 
-class ErrorResponse(BaseModel):
+class ErrorDetail(BaseModel):
     code: str
-    details: list[str]
+    message: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorPayload(BaseModel):
+    code: str
+    message: str
+    details: list[ErrorDetail] | dict[str, Any] | list[dict[str, Any]] | None = None
+    request_id: str | None = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorPayload

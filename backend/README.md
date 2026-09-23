@@ -14,7 +14,11 @@ Quality of Life Score. AI не участвует в вычислениях.
 - расчёт районных оценок, критических показателей и итогового Score;
 - подробная трассировка эффектов для внешнего AI-консультанта;
 - хранение сценариев, решений и результатов в PostgreSQL;
-- история расчётов и optimistic locking через версию сценария;
+- пагинированный список, сброс, удаление и история сценариев;
+- optimistic locking через версию сценария;
+- структурированные ошибки игровых правил и настраиваемый CORS;
+- доверенная интеграция со сторонним AI-консультантом и история чата;
+- request ID, JSON-логи, безопасные `500`, security headers и лимиты запросов;
 - OpenAPI и автоматические тесты.
 
 ## Архитектура
@@ -43,11 +47,24 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 alembic upgrade head
-uvicorn city_simulator.main:app --reload
+python -m uvicorn city_simulator.main:app --reload
 ```
 
 Подключение к базе задаётся через `DATABASE_URL`. Пример находится в `.env.example`.
-Локальный файл `.env` не отслеживается Git.
+Разрешённые origin frontend задаются списком через запятую в
+`CORS_ALLOWED_ORIGINS`. Локальный файл `.env` не отслеживается Git.
+Адрес отдельного AI-сервиса задаётся через `AI_SERVICE_URL`, таймаут — через
+`AI_SERVICE_TIMEOUT_SECONDS`. Основной backend сам формирует доверенный контекст и
+не принимает результаты симуляции от браузера.
+Уровень логирования задаётся `LOG_LEVEL`, максимальное тело запроса —
+`MAX_REQUEST_BODY_BYTES`, лимит AI-вопросов на сценарий —
+`AI_CHAT_REQUESTS_PER_MINUTE`.
+
+При `APP_ENV=production` приложение отказывается запускаться с `APP_DEBUG=true`,
+SQLite или wildcard `*` в CORS. Production-образ работает от непривилегированного
+пользователя и исключает `.env`, тесты, локальные БД и виртуальное окружение из
+Docker-контекста. Лимит чата хранится в памяти процесса; при горизонтальном
+масштабировании его следует заменить общим rate limiter на уровне gateway или Redis.
 
 ### Локальный предпросмотр без PostgreSQL
 
@@ -90,8 +107,11 @@ Swagger UI: <http://127.0.0.1:8000/docs>
 | `POST` | `/api/v1/scenarios/validate` | Проверка неполного выбора |
 | `POST` | `/api/v1/scenarios/simulate` | Финальная проверка и расчёт |
 | `POST` | `/api/v1/scenarios` | Создать хранимый сценарий |
+| `GET` | `/api/v1/scenarios` | Получить страницу сценариев |
 | `GET` | `/api/v1/scenarios/{id}` | Получить сценарий |
 | `PUT` | `/api/v1/scenarios/{id}/decisions` | Заменить выбор мероприятий |
+| `POST` | `/api/v1/scenarios/{id}/reset` | Сбросить выбор мероприятий |
+| `DELETE` | `/api/v1/scenarios/{id}` | Удалить сценарий |
 | `POST` | `/api/v1/scenarios/{id}/calculate` | Рассчитать и сохранить результат |
 | `GET` | `/api/v1/scenarios/{id}/result` | Актуальный результат |
 | `GET` | `/api/v1/scenarios/{id}/results` | История расчётов |
@@ -187,6 +207,8 @@ Swagger UI: <http://127.0.0.1:8000/docs>
 рейтинга. После 12 ходов без победы статус `finished`, иначе `playing`.
 Пример выше возвращает квартал 2, бюджет 203 и транспорт Алматы 52;
 остальные районы остаются в исходном состоянии.
+| `POST` | `/api/v1/scenarios/{id}/chat/messages` | Отправить вопрос консультанту |
+| `GET` | `/api/v1/scenarios/{id}/chat/messages` | Получить историю чата |
 
 Пример финального расчёта:
 
@@ -233,6 +255,7 @@ Swagger UI: <http://127.0.0.1:8000/docs>
 ```powershell
 .\.venv\Scripts\ruff.exe check src tests
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe scripts\smoke.py --base-url http://127.0.0.1:8000
 ```
 
 Эталонный сценарий из задания имеет стоимость `95` и Score `56.54`.

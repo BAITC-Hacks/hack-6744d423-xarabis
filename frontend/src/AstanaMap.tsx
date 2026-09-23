@@ -4,6 +4,8 @@ import type { LngLatBoundsLike, Map as MapLibreMap, Marker } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { DistrictId } from "./caseData";
+import type { CityLifeLayer, LifeOptions, LifeSummary } from "./CityLifeLayer";
+import type { ParkCollection, RoadCollection } from "./cityLifeData";
 import { offlineAstanaStyle } from "./offlineAstanaStyle";
 import {
   DISTRICT_FOCUS,
@@ -69,6 +71,10 @@ const DISTRICT_BOUNDS: LngLatBoundsLike = [
   [71.25, 51.025],
   [71.61, 51.255],
 ];
+const pluralBus = (value: number) =>
+  value % 100 >= 11 && value % 100 <= 14 ? "автобусов" :
+    value % 10 === 1 ? "автобус" :
+      value % 10 >= 2 && value % 10 <= 4 ? "автобуса" : "автобусов";
 
 function showCity(map: MapLibreMap, animate: boolean) {
   map.fitBounds(DISTRICT_BOUNDS, {
@@ -229,6 +235,7 @@ export function AstanaMap({
   const selectionRef = useRef(selectedDistrict);
   const onSelectRef = useRef(onSelectDistrict);
   const projectMarkersRef = useRef<Marker[]>([]);
+  const lifeLayerRef = useRef<CityLifeLayer | null>(null);
   const onProjectRef = useRef(onSelectProject);
   onProjectRef.current = onSelectProject;
   onSelectRef.current = onSelectDistrict;
@@ -236,11 +243,34 @@ export function AstanaMap({
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const [lifeStatus, setLifeStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [lifeSummary, setLifeSummary] = useState<LifeSummary | null>(null);
+  const [lifePlaying, setLifePlaying] = useState(
+    () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const lifeOptionsRef = useRef<LifeOptions>({
+    districtId: selectedDistrict,
+    playing: lifePlaying,
+    active: focus === "detail",
+    speed: 1,
+    projects: projectsVisible ? projects : [],
+  });
+  lifeOptionsRef.current = {
+    districtId: selectedDistrict,
+    playing: lifePlaying,
+    active: focus === "detail",
+    speed: 1,
+    projects: projectsVisible ? projects : [],
+  };
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     setStatus("loading");
+    setLifeStatus("loading");
+    setLifeSummary(null);
+    let disposed = false;
+    const lifeController = new AbortController();
 
     let map: MapLibreMap;
     try {
@@ -380,12 +410,66 @@ export function AstanaMap({
           "line-dasharray": [2, 1],
         },
       });
+      const loadLife = async () => {
+        try {
+          const [module, roadsResponse, parksResponse] = await Promise.all([
+            import("./CityLifeLayer"),
+            fetch(`${import.meta.env.BASE_URL}data/astana/roads.geojson`, { signal: lifeController.signal }),
+            fetch(`${import.meta.env.BASE_URL}data/astana/parks.geojson`, { signal: lifeController.signal }),
+          ]);
+          if (!roadsResponse.ok || !parksResponse.ok) throw new Error("Локальные слои улиц и парков недоступны");
+          const [roads, parks] = await Promise.all([
+            roadsResponse.json() as Promise<RoadCollection>,
+            parksResponse.json() as Promise<ParkCollection>,
+          ]);
+          if (disposed || mapRef.current !== map) return;
+          if (!Array.isArray(roads.features) || !Array.isArray(parks.features)) throw new Error("Некорректные данные улиц или парков");
+          map.addSource("akim-life-roads", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          map.addLayer({
+            id: "akim-life-streets",
+            type: "line",
+            source: "akim-life-roads",
+            minzoom: 13.2,
+            paint: {
+              "line-color": "#d8c798",
+              "line-width": ["interpolate", ["linear"], ["zoom"], 13, 1.5, 17, 5],
+              "line-opacity": 0.26,
+            },
+          }, "akim-project-routes");
+          map.addLayer({
+            id: "akim-life-transit",
+            type: "line",
+            source: "akim-life-roads",
+            minzoom: 13.2,
+            filter: ["==", ["get", "transit"], true],
+            paint: {
+              "line-color": "#258bab",
+              "line-width": ["interpolate", ["linear"], ["zoom"], 13, 2, 17, 6],
+              "line-dasharray": [2, 1.5],
+              "line-opacity": 0.8,
+            },
+          }, "akim-project-routes");
+          const layer = new module.CityLifeLayer(roads, parks, lifeOptionsRef.current, (summary) => {
+            if (!disposed) setLifeSummary(summary);
+          });
+          map.addLayer(layer);
+          lifeLayerRef.current = layer;
+          setLifeStatus("ready");
+        } catch (reason) {
+          if (!disposed && !(reason instanceof DOMException && reason.name === "AbortError")) {
+            setLifeStatus("unavailable");
+          }
+        }
+      };
+      void loadLife();
       showCity(map, false);
       setStatus("ready");
       window.clearTimeout(timeout);
     });
 
     return () => {
+      disposed = true;
+      lifeController.abort();
       window.clearTimeout(timeout);
       resize.disconnect();
       for (const item of markersRef.current) item.marker.remove();
@@ -394,8 +478,20 @@ export function AstanaMap({
       projectMarkersRef.current = [];
       mapRef.current = null;
       map.remove();
+      lifeLayerRef.current = null;
     };
   }, [sourceMode]);
+
+  useEffect(() => {
+    if (lifeStatus === "ready") lifeLayerRef.current?.update(lifeOptionsRef.current);
+  }, [selectedDistrict, projects, projectsVisible, focus, lifePlaying, lifeStatus]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const stopMotion = () => { if (media.matches) setLifePlaying(false); };
+    media.addEventListener("change", stopMotion);
+    return () => media.removeEventListener("change", stopMotion);
+  }, []);
 
   useEffect(() => {
     selectionRef.current = selectedDistrict;
@@ -532,6 +628,26 @@ export function AstanaMap({
               : "Локальная карта · здания: выборка"}
         </small>
       </div>
+      {status === "ready" && focus === "detail" && (
+        <div className="astana-life-panel" aria-label="Жизнь района">
+          <span className={`astana-life-indicator ${lifePlaying && lifeStatus === "ready" ? "is-moving" : ""}`} aria-hidden="true" />
+          <div className="astana-life-copy">
+            <strong>{lifeStatus === "loading" ? "Добавляем жизнь на карту…" : lifeStatus === "unavailable" ? "Движение пока недоступно" : lifePlaying ? "Город в движении" : "Движение на паузе"}</strong>
+            <small>{lifeStatus === "ready" && lifeSummary
+              ? `${lifeSummary.vehicles - lifeSummary.buses} машин · ${lifeSummary.buses} ${pluralBus(lifeSummary.buses)} · ${lifeSummary.trees} деревьев`
+              : "Карта и проекты доступны"}</small>
+            {lifeStatus === "ready" && <small className="astana-life-street">{lifeSummary?.street} · условная анимация по улицам OSM</small>}
+          </div>
+          {lifeStatus === "ready" && (
+            <div className="astana-life-actions">
+              <button type="button" onClick={() => setLifePlaying((playing) => !playing)} aria-pressed={!lifePlaying}>
+                {lifePlaying ? "Пауза" : "Пуск"}
+              </button>
+              <button type="button" onClick={() => lifeLayerRef.current?.streetView()}>К улице</button>
+            </div>
+          )}
+        </div>
+      )}
       {status === "ready" && (
         <div className="astana-map-controls">
           <button

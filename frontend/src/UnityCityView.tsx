@@ -69,6 +69,21 @@ function isDistrictId(value: unknown): value is DistrictId {
   );
 }
 
+function waitForScenePresentation(signal: AbortSignal) {
+  // The current WebGL build keeps its splash screen briefly after the loader resolves.
+  // Keep the loading cover until that presentation window has passed.
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) { resolve(); return; }
+    const finish = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 3200);
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
 async function loadGeoAtlas(signal: AbortSignal) {
   const response = await fetch(ATLAS_URL, { signal });
   if (!response.ok)
@@ -237,6 +252,8 @@ export function UnityCityView({
             JSON.stringify(projectsRef.current),
           );
         setProgress(1);
+        await waitForScenePresentation(controller.signal);
+        if (!mounted) return;
         setStatus("ready");
       } catch (reason) {
         fail(
@@ -322,15 +339,16 @@ export function UnityCityView({
             <span className="unity-loading-mark" aria-hidden="true">
               3D
             </span>
-            <strong>Загружаем 3D-макет Астаны</strong>
+            <strong>{progress >= 1 ? "Разворачиваем городскую сцену" : "Загружаем 3D-макет Астаны"}</strong>
             <span>
-              Границы районов, дороги, парки и здания. Первая загрузка — около
-              10,8 МиБ.
+              {progress >= 1
+                ? "Расставляем районы, дороги и проекты. Макет откроется через мгновение."
+                : "Границы районов, дороги, парки и здания. Первая загрузка — около 10,8 МиБ."}
             </span>
             <div className="unity-progress">
               <i style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
-            <small>{Math.round(progress * 100)}%</small>
+            <small>{progress >= 1 ? "Подготовка сцены" : `${Math.round(progress * 100)}%`}</small>
           </div>
         )}
         {status === "error" && (

@@ -270,7 +270,6 @@ export function App() {
   function selectDistrict(id: DistrictId) {
     setDistrictId(id);
     setFocus("detail");
-    setMobilePanel(true);
     setCameraRevision((value) => value + 1);
   }
   function editPlan(next: Decision[]) {

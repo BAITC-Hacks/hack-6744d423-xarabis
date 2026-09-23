@@ -317,6 +317,57 @@
   color: #365b49;
   background: #edf4ee;
 }
+.city-workspace .astana-life-panel {
+  position: absolute;
+  z-index: 4;
+  bottom: 115px;
+  left: 14px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 4px 10px;
+  width: min(310px, calc(100% - 28px));
+  padding: 11px 12px;
+  color: #294738;
+  background: #fffffff2;
+  border: 1px solid #d9e4dc;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px #244b3724;
+  backdrop-filter: blur(10px);
+}
+.astana-life-indicator {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #9aa99d;
+}
+.astana-life-indicator.is-moving {
+  background: #299065;
+  box-shadow: 0 0 0 4px #29906520;
+}
+.astana-life-copy { display: grid; gap: 2px; min-width: 0; }
+.astana-life-copy strong { font-size: 12px; line-height: 1.2; }
+.astana-life-copy small { color: #62796a; font-size: 10px; line-height: 1.35; }
+.astana-life-street { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.astana-life-actions {
+  grid-column: 2;
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+.astana-life-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid #cfdfd4;
+  border-radius: 6px;
+  background: #f0f5ef;
+  color: #27543e;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.astana-life-actions button:hover { background: #e2eee4; }
+.astana-life-actions button:focus-visible { outline: 2px solid #248563; outline-offset: 2px; }
 .map-value-legend {
   font-size: 9px;
   color: #5e6e61;
@@ -1575,6 +1626,26 @@
     min-height: 25px;
     padding: 4px 7px;
   }
+  .city-workspace .astana-life-panel {
+    bottom: 105px;
+    left: 8px;
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    width: min(340px, calc(100% - 16px));
+    padding: 7px 9px;
+  }
+  .astana-life-copy strong { font-size: 10px; }
+  .astana-life-copy small { font-size: 9px; }
+  .astana-life-street { display: none; }
+  .astana-life-actions {
+    grid-column: 3;
+    grid-row: 1;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+  }
+  .astana-life-actions button { min-height: 25px; padding: 3px 7px; font-size: 9px; }
   .map-view-switch {
     bottom: 61px;
     padding: 3px;

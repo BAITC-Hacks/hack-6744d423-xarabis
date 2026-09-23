@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { UnityCityView } from "./UnityCityView";
 import { ConsultantPanel } from "./ConsultantPanel";
 import { getCityNetworkDemo } from "./cityNetworkDemo";
@@ -22,7 +22,9 @@ import {
 
 type LayerId = "score" | CategoryId;
 type ViewMode = "before" | "after";
-type MapMode = "schematic" | "unity";
+type MapMode = "real" | "schematic" | "unity";
+
+const AstanaMap = lazy(() => import("./AstanaMap").then((module) => ({ default: module.AstanaMap })));
 
 const LAYERS: { id: LayerId; label: string }[] = [
   { id: "score", label: "Общий индекс" },
@@ -113,7 +115,7 @@ export function App() {
   const simulator = useCitySimulator();
   const [activeDistrict, setActiveDistrict] = useState<DistrictId>("nura");
   const [activeLayer, setActiveLayer] = useState<LayerId>("score");
-  const [mapMode, setMapMode] = useState<MapMode>("schematic");
+  const [mapMode, setMapMode] = useState<MapMode>("real");
   const [viewMode, setViewMode] = useState<ViewMode>("before");
   const [showReferenceResult, setShowReferenceResult] = useState(false);
   const [referencePlanLoaded, setReferencePlanLoaded] = useState(false);
@@ -352,13 +354,14 @@ export function App() {
           </div>
         </aside>
 
-        <section className="city-panel panel" aria-label={mapMode === "unity" ? "Интерактивная Unity-сцена городской сети" : "Схематическая модель города"}>
+        <section className="city-panel panel" aria-label={mapMode === "real" ? "Карта Астаны с объёмными зданиями" : mapMode === "unity" ? "Интерактивная Unity-сцена городской сети" : "Схематическая модель города"}>
           <div className="map-topline">
             <div><div className="section-index">02 / МОДЕЛЬ ГОРОДА</div><h2>Городская модель</h2></div>
             <div className="map-header-actions">
               <div className="renderer-toggle" role="group" aria-label="Режим карты">
+                <button type="button" className={mapMode === "real" ? "selected" : ""} aria-pressed={mapMode === "real"} onClick={() => setMapMode("real")}>3D карта</button>
                 <button type="button" className={mapMode === "schematic" ? "selected" : ""} aria-pressed={mapMode === "schematic"} onClick={() => setMapMode("schematic")}>Схема</button>
-                <button type="button" className={mapMode === "unity" ? "selected" : ""} aria-pressed={mapMode === "unity"} onClick={() => setMapMode("unity")}>3D <span className="unity-toggle-dot" /></button>
+                <button type="button" className={mapMode === "unity" ? "selected" : ""} aria-pressed={mapMode === "unity"} onClick={() => setMapMode("unity")}>Unity <span className="unity-toggle-dot" /></button>
               </div>
               <button className="map-mode-toggle" onClick={() => { setViewMode((current) => current === "before" ? "after" : "before"); }} disabled={!hasResult} aria-pressed={viewMode === "after"} aria-label="Переключить исходный вид и результат">
                 <span className={viewMode === "before" ? "selected" : ""}>До</span><span className={viewMode === "after" ? "selected" : ""}>После</span>
@@ -369,7 +372,11 @@ export function App() {
           <div className="map-canvas">
             {mapMode === "schematic" && <div className="map-watermark">ASTANA<span>· 2026</span></div>}
             {mapMode === "schematic" && <div className="map-caption"><span className="live-dot" /> СИНТЕТИЧЕСКАЯ СХЕМА</div>}
-            {mapMode === "unity" ? (
+            {mapMode === "real" ? (
+              <Suspense fallback={<div className="astana-map-state" role="status"><strong>Подключаем карту Астаны</strong></div>}>
+                <AstanaMap selectedDistrict={activeDistrict} onSelectDistrict={setActiveDistrict} onFallback={() => setMapMode("schematic")} />
+              </Suspense>
+            ) : mapMode === "unity" ? (
               <UnityCityView selectedDistrict={activeDistrict} districtName={activeInfo.name} onSelectDistrict={setActiveDistrict} sceneData={getCityNetworkDemo(activeDistrict)} />
             ) : (
               <svg className="city-svg" viewBox="0 0 720 500" role="img" aria-label="Пять схематически расположенных районов Астаны. Выбери район для просмотра показателей.">
@@ -411,7 +418,7 @@ export function App() {
             {mapMode === "schematic" && <span className="schematic-stamp">СХЕМА · НЕ ГЕОГРАФИЧЕСКИЕ ГРАНИЦЫ</span>}
           </div>
 
-          <div className="map-footnote"><span>{mapMode === "unity" ? "3D-сеть условная · выбор синхронизирован со списком" : "Нажми на район или выбери его в списке"}</span><span>Сценарий <b>·</b> H = {horizon} кварталов</span></div>
+          <div className="map-footnote"><span>{mapMode === "real" ? "География OSM · показатели района из симулятора, не из карты" : mapMode === "unity" ? "Unity-макет условный · выбор синхронизирован со списком" : "Нажми на район или выбери его в списке"}</span><span>Сценарий <b>·</b> H = {horizon} кварталов</span></div>
         </section>
 
         <aside className="initiative-panel panel">
@@ -517,7 +524,7 @@ export function App() {
       <ConsultantPanel />
 
       <div className={`toast ${notice ? "visible" : ""}`} role="status" aria-live="polite">{notice}<button onClick={() => setNotice("")} aria-label="Закрыть сообщение"><Glyph name="close" size={15} /></button></div>
-      <footer className="app-footer"><span>{live ? "Показатели и меры: Python API · карта условная" : "Демонстрационные данные · карта условная"}</span><span>Показатель ниже {threshold} считается критическим</span><span>Горизонт H={horizon} кварталов</span></footer>
+      <footer className="app-footer"><span>{live ? "Показатели и меры: Python API · геоподложка OSM" : "Демоданные симуляции · геоподложка OSM"}</span><span>Показатель ниже {threshold} считается критическим</span><span>Горизонт H={horizon} кварталов</span></footer>
     </div>
   );
 }

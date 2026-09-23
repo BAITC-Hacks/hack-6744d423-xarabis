@@ -126,6 +126,30 @@ button:disabled { cursor: not-allowed; }
 .map-mode-toggle span.selected { color: #33594c; background: #fff; box-shadow: 0 1px 4px rgb(34 55 45 / 9%); }
 .map-mode-toggle:disabled { opacity: .55; }
 .map-canvas { position: relative; min-height: 430px; flex: 1; overflow: hidden; background-color: #f2f4ee; background-image: radial-gradient(ellipse at 50% 48%, rgb(255 255 255 / 90%) 0%, rgb(244 246 240 / 70%) 46%, rgb(235 239 230 / 65%) 100%), radial-gradient(#d9e0d5 0.65px, transparent .65px); background-size: auto, 17px 17px; }
+.astana-map-shell { position: absolute; inset: 0; overflow: hidden; background: #142322; }
+.astana-map-shell .astana-map { position: absolute; inset: 0; }
+.astana-map-label { position: absolute; z-index: 2; top: 14px; left: 14px; display: grid; grid-template-columns: 6px 1fr; column-gap: 8px; row-gap: 3px; max-width: calc(100% - 105px); padding: 10px 12px; color: #f4f7ef; background: rgb(21 37 35 / 87%); border: 1px solid rgb(209 232 217 / 18%); border-radius: 9px; box-shadow: 0 10px 24px rgb(0 0 0 / 16%); backdrop-filter: blur(10px); pointer-events: none; }
+.astana-map-label strong { font: 800 10px/1.2 Manrope, sans-serif; letter-spacing: .08em; }
+.astana-map-label small { grid-column: 2; color: #bed0c8; font-size: 9px; line-height: 1.25; }
+.astana-map-live { width: 6px; height: 6px; margin-top: 3px; border-radius: 50%; background: #8fe4b9; box-shadow: 0 0 0 3px rgb(143 228 185 / 18%); }
+.astana-map-controls { position: absolute; z-index: 2; bottom: 29px; left: 14px; display: flex; align-items: center; gap: 9px; max-width: calc(100% - 28px); padding: 5px 10px 5px 5px; color: #d5e3dc; background: rgb(21 37 35 / 88%); border: 1px solid rgb(209 232 217 / 18%); border-radius: 8px; box-shadow: 0 7px 18px rgb(0 0 0 / 16%); backdrop-filter: blur(10px); font-size: 9px; }
+.astana-map-controls button { min-height: 30px; flex: 0 0 auto; padding: 5px 9px; color: #173c34; background: #d6eee1; border: 0; border-radius: 5px; font-size: 9px; font-weight: 800; cursor: pointer; }
+.astana-map-controls button:hover { background: #f0fbef; }
+.astana-map-state { position: absolute; z-index: 3; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 7px; padding: 28px; color: #e8f2e8; background: #142322; text-align: center; }
+.astana-map-state strong { font: 800 14px Manrope, sans-serif; }
+.astana-map-state span { max-width: 280px; color: #abc3b7; font-size: 11px; line-height: 1.5; }
+.astana-map-state button { min-height: 38px; margin-top: 8px; padding: 7px 12px; color: #183c32; background: #d5eddf; border: 0; border-radius: 6px; font-size: 11px; font-weight: 800; cursor: pointer; }
+.astana-district-pin { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 29px; padding: 5px 9px 5px 7px; color: #f0f7f1; background: #1b3935; border: 1px solid #8eb5a3; border-radius: 6px; box-shadow: 0 3px 0 rgb(3 16 15 / 38%), 0 8px 20px rgb(0 0 0 / 25%); white-space: nowrap; font: 800 10px/1.1 Manrope, sans-serif; cursor: pointer; transition: transform .16s, color .16s, background .16s; }
+.astana-district-pin::after { content: ""; position: absolute; top: 100%; left: calc(50% - 5px); border: 5px solid transparent; border-top-color: #1b3935; }
+.astana-district-pin.is-east::after { left: auto; right: 5px; }
+.astana-district-pin:hover, .astana-district-pin:focus-visible { transform: translateY(-3px); background: #286d5d; }
+.astana-district-pin.is-active { color: #173c34; background: #f0d596; border-color: #f8e7bc; }
+.astana-district-pin.is-active::after { border-top-color: #f0d596; }
+.astana-pin-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #8ce6b4; }
+.is-active .astana-pin-dot { background: #316959; }
+.astana-map-shell .maplibregl-ctrl-attrib.maplibregl-compact-show { color: #e4eee8; background: rgb(17 34 32 / 90%); font-size: 9px; }
+.astana-map-shell .maplibregl-ctrl-attrib a { color: #f0d596; }
+.astana-map-shell .maplibregl-ctrl-group { overflow: hidden; background: rgb(235 245 236 / 94%); border-radius: 7px; box-shadow: 0 6px 20px rgb(0 0 0 / 22%); }
 .unity-city-view { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 42%, #f9fbf5 0%, #edf1e8 74%, #e4e9df 100%); }
 .unity-city-canvas { width: 100%; height: 100%; display: block; background: transparent; outline: none; }
 .unity-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; color: #53645a; text-align: center; background: radial-gradient(ellipse at center, rgb(255 255 255 / 92%), rgb(242 245 238 / 92%)); }
@@ -377,7 +401,8 @@ button:disabled { cursor: not-allowed; }
   .score-reading > strong { font-size: 20px; }
   .dashboard { display: flex; flex-direction: column; gap: 10px; }
   .city-panel { order: 0; min-height: 490px; }
-  .map-topline { gap: 6px; padding-inline: 9px; }
+  .map-topline { flex-wrap: wrap; gap: 5px; padding: 8px 9px; }
+  .map-header-actions { flex: 1 0 100%; justify-content: space-between; }
   .map-header-actions { gap: 4px; }
   .renderer-toggle, .map-mode-toggle { font-size: 10px; }
   .renderer-toggle button { min-height: 36px; padding-inline: 7px; }
@@ -385,6 +410,8 @@ button:disabled { cursor: not-allowed; }
   .district-panel { order: 1; min-height: 570px; }
   .initiative-panel { order: 2; min-height: 570px; }
   .map-canvas { min-height: 415px; }
+  .astana-map-label { top: 10px; left: 10px; max-width: calc(100% - 65px); padding: 8px; }
+  .astana-map-controls { bottom: 28px; left: 9px; gap: 6px; max-width: calc(100% - 18px); }
   .map-controls { align-items: flex-start; }
   .layer-label { padding-top: 5px; }
   .layer-buttons { justify-content: flex-end; flex-wrap: wrap; }
@@ -436,6 +463,8 @@ button:disabled { cursor: not-allowed; }
   .score-label { max-width: 100px; font-size: 8px; line-height: 1.4; }
   .layer-buttons button { padding-inline: 4px; font-size: 9px; }
   .map-canvas { min-height: 380px; }
+  .astana-map-controls span { max-width: 145px; line-height: 1.25; }
+  .astana-district-pin { min-height: 27px; padding: 5px 6px; font-size: 9px; }
   .map-controls { left: 7px; right: 7px; padding: 6px 5px; }
   .layer-label { font-size: 8px; }
   .district-row { gap: 4px; }

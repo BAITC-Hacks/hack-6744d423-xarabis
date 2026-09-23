@@ -18,6 +18,7 @@ const mimeTypes = {
   ".js": "application/javascript",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".geojson": "application/geo+json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".ico": "image/x-icon",
@@ -86,7 +87,7 @@ createServer(async (request, response) => {
   }
   const extension = target.slice(target.lastIndexOf("."));
   if (await sendFile(response, target, { "Content-Type": mimeTypes[extension] ?? "application/octet-stream" })) return;
-  if (pathname.startsWith("/assets/") || pathname.startsWith("/unity/")) {
+  if (pathname.startsWith("/assets/") || pathname.startsWith("/unity/") || pathname.startsWith("/data/")) {
     response.writeHead(404).end();
     return;
   }

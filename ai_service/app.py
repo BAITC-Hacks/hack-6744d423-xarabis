@@ -6,9 +6,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .config import Settings
+from .district_schemas import SandboxV2ChatRequest
 from .errors import AIError
 from .provider import OpenAIProvider
-from .schemas import ChatRequest, ChatResponse, ErrorResponse
+from .schemas import ChatRequest, ChatResponse, ErrorResponse, SandboxChatRequest
 from .streaming import ClosingStreamingResponse, encode_event
 
 
@@ -47,12 +48,43 @@ def create_app(settings: Settings | None = None, provider: OpenAIProvider | None
     async def chat(payload: ChatRequest):
         return await configured_provider.generate(payload)
 
+    @application.post('/sandbox/chat', response_model=ChatResponse,
+                      responses={code: {'model': ErrorResponse} for code in (422, 502, 503, 504)},
+                      summary='Консультант вымышленного города Новый Берег')
+    async def sandbox_chat(payload: SandboxChatRequest):
+        return await configured_provider.generate(payload)
+
+    @application.post('/sandbox/v2/chat', response_model=ChatResponse,
+                      responses={code: {'model': ErrorResponse} for code in (422, 502, 503, 504)},
+                      summary='Консультант пяти районов вымышленного Нового Берега')
+    async def sandbox_v2_chat(payload: SandboxV2ChatRequest):
+        return await configured_provider.generate(payload)
+
     @application.post('/chat/stream', response_class=ClosingStreamingResponse,
                       responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}},
                                        'description': 'answer_delta, then complete or error; see README'},
                                  422: {'model': ErrorResponse}, 503: {'model': ErrorResponse}},
                       summary='Поток текста ответа и проверенный итоговый отчёт')
     async def chat_stream(payload: ChatRequest):
+        return streaming_response(payload)
+
+    @application.post('/sandbox/chat/stream', response_class=ClosingStreamingResponse,
+                      responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}},
+                                       'description': 'answer_delta, then complete or error; see README'},
+                                 422: {'model': ErrorResponse}, 503: {'model': ErrorResponse}},
+                      summary='Поток ответа консультанта вымышленного города')
+    async def sandbox_chat_stream(payload: SandboxChatRequest):
+        return streaming_response(payload)
+
+    @application.post('/sandbox/v2/chat/stream', response_class=ClosingStreamingResponse,
+                      responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}},
+                                       'description': 'answer_delta, then complete or error; see README'},
+                                 422: {'model': ErrorResponse}, 503: {'model': ErrorResponse}},
+                      summary='Поток ответа консультанта пяти вымышленных районов')
+    async def sandbox_v2_chat_stream(payload: SandboxV2ChatRequest):
+        return streaming_response(payload)
+
+    def streaming_response(payload: ChatRequest | SandboxChatRequest | SandboxV2ChatRequest):
         if not configured_provider.settings.configured:
             raise AIError('ai_not_configured')
 

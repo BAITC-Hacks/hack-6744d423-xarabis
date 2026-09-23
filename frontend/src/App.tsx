@@ -514,7 +514,11 @@ export function App() {
 
       {live && simulator.history.length > 0 && <details className="history-panel"><summary>История расчётов · {simulator.history.length}</summary><div>{simulator.history.map((entry) => <div className="history-row" key={entry.id}><span>Версия {entry.scenario_version} · {new Date(entry.created_at).toLocaleString("ru-RU")}</span><strong>{formatScore(entry.simulation.score_before)} → {formatScore(entry.simulation.score_after)}</strong><small>{formatDelta(entry.simulation.score_delta)}</small></div>)}</div></details>}
 
-      <ConsultantPanel />
+      <ConsultantPanel context={{
+        selected_measures: decisions.map(item => ({measure_id: item.measureId, district_id: item.districtId ?? null})),
+        budget_remaining: Math.max(0, budgetLimit - decisions.reduce((sum, item) => sum + (cityMeasures.find(m => m.id === item.measureId)?.cost ?? 0), 0)),
+        simulation_result: result ? {score_before: result.score_before, score_after: result.score_after, score_delta: result.score_delta, districts: result.districts, critical_before: result.critical_before, critical_after: result.critical_after, effects: result.effects} : null,
+      }} />
 
       <div className={`toast ${notice ? "visible" : ""}`} role="status" aria-live="polite">{notice}<button onClick={() => setNotice("")} aria-label="Закрыть сообщение"><Glyph name="close" size={15} /></button></div>
       <footer className="app-footer"><span>{live ? "Показатели и меры: Python API · карта условная" : "Демонстрационные данные · карта условная"}</span><span>Показатель ниже {threshold} считается критическим</span><span>Горизонт H={horizon} кварталов</span></footer>

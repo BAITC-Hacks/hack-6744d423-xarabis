@@ -1,0 +1,71 @@
+.district-shell .sandbox-title h1 {font-size:36px;letter-spacing:-1.4px;}
+.district-shell .sandbox-title h1>span {color:#8870bc;}
+.district-layout {display:grid;grid-template-columns:minmax(0,1fr) 302px;gap:20px;align-items:start;}
+.district-map {position:relative;height:565px;background:#f0f1f7;margin:0 9px;border-radius:12px;overflow:hidden;}
+.district-canvas,.district-pins {position:absolute;inset:0;}
+.district-canvas canvas {display:block;touch-action:none;}
+.district-pins {pointer-events:none;}
+.district-pin {position:absolute;transform:translate(-50%,-50%);pointer-events:auto;display:flex;align-items:center;gap:9px;min-width:105px;padding:8px 11px;border:1px solid #ffffffc9;border-bottom:3px solid var(--district-color);border-radius:9px;background:#fffffff0;color:#3e3850;box-shadow:0 4px 14px #22233819;cursor:pointer;white-space:nowrap;transition:background .2s,box-shadow .2s;}
+.district-pin>span {font-size:11px;font-weight:650;}
+.district-pin strong {font-size:17px;letter-spacing:-.6px;color:#54465f;font-weight:750;}
+.district-pin.selected {background:#fff;box-shadow:0 0 0 2px #a593d8,0 6px 20px #4e3b642b;z-index:2;}
+.district-pin:focus-visible {outline:3px solid #8a6ebd;outline-offset:3px;}
+.district-map-caption {position:absolute;top:18px;left:20px;font-size:9px;font-weight:700;letter-spacing:1.5px;color:#9a91ac;pointer-events:none;}
+.district-map-caption>span {display:block;font-size:8px;font-weight:400;letter-spacing:.3px;margin-top:5px;}
+.district-time-badge {position:absolute;right:18px;top:15px;padding:8px 11px;border-radius:8px;background:#fff9;color:#7b6c95;border:1px solid #ddd9e8;font-size:12px;letter-spacing:.5px;}
+.district-map[data-night=true] .district-time-badge {background:#34405dcc;border-color:#58627f;color:#ebdba8;}
+.district-map[data-night=true] .district-map-caption,.district-map[data-night=true] .district-map-hint {color:#a5aec4;}
+.district-map-hint {position:absolute;bottom:15px;left:20px;color:#9e94af;font-size:9px;pointer-events:none;}
+.district-map-toolbar {display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 20px 10px;}
+.district-map-toolbar>button {border:1px solid #e4dcef;border-radius:7px;background:#fff;color:#9786ac;font-size:9px;padding:7px 9px;cursor:pointer;white-space:nowrap;}
+.district-color-legend {display:grid;grid-template-columns:10px 110px 20px;gap:6px;align-items:center;font-size:8px;color:#b0a4be;}
+.district-color-legend i {height:5px;border-radius:5px;background:linear-gradient(90deg,#c23543 0%,#ef674d 39%,#e9b739 50%,#afd071 65%,#299e7d 100%);}
+.district-color-legend small {grid-column:1/-1;font-size:8px;color:#a69ab6;}
+.district-clock {display:flex;align-items:center;gap:8px;margin:5px 20px 14px;padding:10px 12px;border:1px solid #efebf5;border-radius:9px;background:#fbfafd;}
+.district-clock>span {font-size:9px;color:#aa9eb8;margin-right:auto;white-space:nowrap;}
+.district-clock input {width:105px;min-width:45px;accent-color:#a88bcf;cursor:pointer;}
+.district-clock button {font-size:9px;border:0;background:transparent;color:#a091b1;padding:4px 6px;border-radius:5px;cursor:pointer;}
+.district-clock button[aria-pressed=true] {background:#efe6fa;color:#8f6cbc;}
+.district-cards {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;padding:0 20px;}
+.district-cards>button {text-align:left;background:#fff;border:1px solid #eae3f2;border-radius:9px;padding:10px 9px;cursor:pointer;overflow:hidden;}
+.district-cards>button[aria-pressed=true] {background:#faf7fe;border-color:#b59cd5;box-shadow:inset 0 0 0 1px #e7dcf5;}
+.district-cards span {display:block;font-size:10px;color:#908298;white-space:nowrap;}
+.district-cards strong {display:block;font-size:22px;color:#51465c;margin:7px 0;letter-spacing:-.6px;}
+.district-cards i {display:block;background:var(--district-color);height:3px;border-radius:3px;}
+.district-cards small {display:block;font-size:7px;color:#ac9eb7;margin-top:7px;white-space:nowrap;}
+.district-rating-note {margin:13px 20px 18px;font-size:9px;color:#afa4b9;line-height:1.7;}
+.district-projects {padding:22px 18px;}
+.district-detail-title {display:flex;align-items:baseline;justify-content:space-between;margin-top:10px;}
+.district-detail-title h2 {font-size:28px;letter-spacing:-.9px;font-weight:650;margin:0;}
+.district-detail-title>strong {font-size:27px;letter-spacing:-1px;}
+.district-detail-title small {font-size:9px;color:#b3a4bf;margin-left:3px;letter-spacing:0;font-weight:400;}
+.district-description {font-size:10px;line-height:1.7;color:#a295ae;margin:10px 0 19px;}
+.district-indicators {display:grid;gap:12px;padding-bottom:20px;border-bottom:1px solid #efeaf5;}
+.district-indicators>div {display:grid;grid-template-columns:72px 1fr 22px;gap:8px;align-items:center;position:relative;}
+.district-indicators span {font-size:9px;color:#96849e;}
+.district-indicators>div>div {height:4px;background:#f0ebf4;border-radius:3px;overflow:hidden;}
+.district-indicators i {display:block;height:100%;transition:width .6s;}
+.district-indicators strong {font-size:12px;color:#82708d;font-weight:600;text-align:right;}
+.district-indicators small {font-size:6px;position:absolute;right:27px;top:-7px;color:#e59483;}
+.district-project-head {display:flex;align-items:center;justify-content:space-between;margin-top:20px;gap:6px;}
+.district-project-head h3 {font-size:12px;margin:0;font-weight:600;}
+.district-project-head>span {font-size:8px;color:#ad9abc;}
+.district-projects .sandbox-upgrades {margin-top:12px;gap:7px;}
+.district-projects .upgrade-card {padding:10px 8px;}
+.district-projects .upgrade-copy strong {font-size:10px;}
+.district-projects .upgrade-copy>span {font-size:8px;}
+.district-projects .upgrade-copy em {font-size:8px;}
+.district-plan {margin-top:20px;display:grid;grid-template-columns:170px 1fr 200px;align-items:center;gap:20px;padding:20px 22px;background:#fff;border:1px solid #e9e1f2;border-radius:14px;}
+.district-plan h3 {font-size:16px;font-weight:600;margin:8px 0 0;}
+.district-plan h3 small {font-size:10px;color:#aa9cb9;font-weight:400;}
+.district-plan-items {display:flex;flex-wrap:wrap;gap:8px;}
+.district-plan-items>p {color:#aaa0b6;font-size:11px;line-height:1.7;margin:0;}
+.district-plan-items>div {position:relative;display:flex;flex-direction:column;gap:4px;padding:9px 24px 9px 11px;border-radius:8px;background:#f7f3fb;border:1px solid #eae0f5;}
+.district-plan-items strong {font-size:9px;color:#9375b0;}
+.district-plan-items span {font-size:9px;color:#a191b0;}
+.district-plan-items button {position:absolute;right:3px;top:6px;border:0;background:transparent;color:#b0a0bc;cursor:pointer;font-size:15px;}
+.district-next>small {display:block;text-align:center;font-size:8px;color:#af9dbe;margin-top:7px;}
+@media(min-width:1500px){.district-layout{grid-template-columns:minmax(0,1fr) 330px}.district-map{height:610px}.district-projects .upgrade-card{padding:13px 9px}.district-pin{min-width:118px;padding:10px 12px}.district-pin>span{font-size:12px}}
+@media(max-width:1100px){.district-layout{grid-template-columns:minmax(0,1fr) 265px;gap:14px}.district-projects{padding:20px 13px}.district-map{height:515px}.district-cards{padding:0 11px;gap:5px}.district-cards>button{padding:8px 5px}.district-cards span{font-size:9px}.district-cards strong{font-size:19px}.district-cards small{font-size:6px}.district-pin{min-width:89px;gap:5px;padding:7px 8px}.district-pin>span{font-size:9px}.district-pin strong{font-size:15px}.district-map-toolbar{padding:12px}.district-clock{margin-left:12px;margin-right:12px;gap:4px}.district-clock input{width:75px}.district-plan{grid-template-columns:145px 1fr 180px;padding:18px;gap:12px}.district-shell .sandbox-title h1{font-size:30px}}
+@media(max-width:800px){.district-layout{grid-template-columns:1fr}.district-map{height:530px}.district-projects .sandbox-upgrades{grid-template-columns:1fr 1fr}.district-plan{grid-template-columns:1fr 190px}.district-plan>div:first-child{grid-column:1/-1}.district-shell .sandbox-title h1{font-size:28px}.district-pin{min-width:100px}.district-pin>span{font-size:11px}.district-cards strong{font-size:24px}.district-cards span{font-size:11px}.district-cards small{font-size:8px}.district-clock input{width:160px}.district-clock>span{font-size:10px}}
+@media(max-width:480px){.district-shell .sandbox-title h1{font-size:24px;line-height:1.2;letter-spacing:-.7px;max-width:230px}.district-shell .sandbox-title p{font-size:9px}.district-shell .quarter-pill{min-width:90px}.district-map{height:435px}.district-pin{min-width:70px;padding:6px 6px;gap:4px}.district-pin>span{font-size:8px}.district-pin strong{font-size:12px}.district-time-badge{right:10px;top:12px;font-size:10px}.district-map-caption{left:12px;top:16px;font-size:7px}.district-map-hint{left:12px;font-size:7px;bottom:12px}.district-cards{gap:4px}.district-cards>button{padding:8px 4px}.district-cards strong{font-size:18px}.district-cards span{font-size:8px}.district-cards small{display:none}.district-clock>span{font-size:8px}.district-clock input{width:75px}.district-clock{padding:8px}.district-color-legend small{font-size:7px}.district-rating-note{font-size:8px;margin:12px}.district-projects .sandbox-upgrades{grid-template-columns:1fr}.district-plan{grid-template-columns:1fr;padding:18px}.district-plan>div:first-child{grid-column:auto}.district-next{margin-top:6px}.district-detail-title h2{font-size:25px}}

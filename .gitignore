@@ -1,5 +1,7 @@
 *.docx
-
+*.md 
+# test 
+/demo 
 # .NET
 **/bin/
 **/obj/

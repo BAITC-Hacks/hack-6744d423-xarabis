@@ -23,7 +23,7 @@ export function ConsultantPanel({ context, sandbox = false, sandboxVersion = 'v1
     const timer = window.setTimeout(() => controller.abort('timeout'), 65_000);
     setBusy(true); setError(''); setPreview(''); setResponse(null); setLastMessage(text.trim());
     try {
-      const stream = await fetch(`/api/ai/${sandbox ? sandboxVersion === 'v2' ? 'sandbox/v2/' : 'sandbox/' : ''}chat/stream`, {
+      const stream = await fetch(`/api/v1/sandbox/${sandboxVersion === 'v2' ? 'v2/' : ''}chat/stream`, {
         method: 'POST', headers: {'Content-Type': 'application/json', Accept: 'text/event-stream'},
         body: JSON.stringify({message: text.trim(), history, context}), signal: controller.signal,
       });
@@ -41,7 +41,7 @@ export function ConsultantPanel({ context, sandbox = false, sandboxVersion = 'v1
     <div className="advisor-prompts">{['С чего начать?', 'Какие риски у моего плана?'].map(text => <button key={text} disabled={busy || !context} onClick={() => void send(text)}>{text} ↗</button>)}</div>
     {lastMessage && <p className="advisor-question">{lastMessage}</p>}
     {(preview || busy) && !response && <div className="consultant-response"><p>{preview || 'Советник изучает город…'}{busy && <span className="stream-cursor">▍</span>}</p>{!busy && error && <small>Незавершённый ответ</small>}</div>}
-    {response && <div className="consultant-response"><p>{response.answer}</p><ResponseGroup title="Сильные стороны" items={response.strengths}/><ResponseGroup title="Риски" items={response.risks}/><ResponseGroup title="Рекомендации" items={response.recommendations}/>{response.follow_up_question && <p>{response.follow_up_question}</p>}</div>}
+    {response && <div className="consultant-response"><p>{response.answer}</p><ResponseGroup title="Сильные стороны" items={response.strengths}/><ResponseGroup title="Риски" items={response.risks}/><ResponseGroup title="Возможные последствия" items={response.consequences}/><ResponseGroup title="Рекомендации" items={response.recommendations}/>{response.follow_up_question && <p>{response.follow_up_question}</p>}</div>}
     {error && <p className="consultant-error" role="alert">{error}</p>}
     <form className="consultant-form" onSubmit={submit}><label htmlFor={sandbox ? 'sandbox-question' : 'astana-question'}>Вопрос консультанту</label><div><input id={sandbox ? 'sandbox-question' : 'astana-question'} value={message} onChange={e => setMessage(e.target.value)} maxLength={4000} placeholder="Как сделать город лучше?"/>{busy ? <button type="button" onClick={() => pending.current?.abort()}>Стоп</button> : <button disabled={!context || !message.trim()}>Отправить ↗</button>}</div></form>
   </section>;

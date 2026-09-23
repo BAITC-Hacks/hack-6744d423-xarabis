@@ -31,6 +31,7 @@ def get_request_id() -> str | None:
 
 class ChatRateLimitMiddleware(BaseHTTPMiddleware):
     _chat_path = re.compile(r"/scenarios/([^/]+)/chat/messages$")
+    _sandbox_path = re.compile(r"/sandbox/(?:v2/)?chat/stream$")
 
     def __init__(self, app, *, requests_per_minute: int) -> None:
         super().__init__(app)
@@ -44,11 +45,16 @@ class ChatRateLimitMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         match = self._chat_path.search(request.url.path)
-        if request.method != "POST" or match is None:
+        sandbox = self._sandbox_path.search(request.url.path)
+        if request.method != "POST" or (match is None and sandbox is None):
             return await call_next(request)
 
         now = perf_counter()
-        scenario_id = match.group(1)
+        scenario_id = (
+            match.group(1)
+            if match
+            else f"sandbox:{request.client.host if request.client else 'unknown'}"
+        )
         async with self._lock:
             entries = self._requests[scenario_id]
             while entries and entries[0] <= now - 60:

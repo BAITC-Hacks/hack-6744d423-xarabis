@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import StringConstraints
+from pydantic import Field, StringConstraints
 
 from city_simulator.domain.enums import ChatRole
 from city_simulator.presentation.schemas import StrictModel
@@ -24,6 +24,7 @@ class ConsultantReportResponse(StrictModel):
     answer: str
     strengths: list[AnalysisBlockResponse]
     risks: list[AnalysisBlockResponse]
+    consequences: list[AnalysisBlockResponse] = Field(max_length=5)
     recommendations: list[AnalysisBlockResponse]
     follow_up_question: str | None
 

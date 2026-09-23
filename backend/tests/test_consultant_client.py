@@ -21,6 +21,7 @@ async def test_consultant_client_sends_exact_contract_and_validates_response() -
                 "answer": "Ответ",
                 "strengths": [],
                 "risks": [],
+                "consequences": [{"title": "Эффект", "explanation": "Транспорт улучшится"}],
                 "recommendations": [],
                 "follow_up_question": None,
             },
@@ -46,6 +47,8 @@ async def test_consultant_client_sends_exact_contract_and_validates_response() -
         )
 
     assert report.answer == "Ответ"
+    assert report.consequences[0].title == "Эффект"
+    assert report.consequences[0].explanation == "Транспорт улучшится"
     assert captured == {
         "message": "Вопрос",
         "history": [],
@@ -98,6 +101,7 @@ async def test_consultant_client_sends_complete_calculated_result_contract(
                 "answer": "Расчёт принят.",
                 "strengths": [],
                 "risks": [],
+                "consequences": [],
                 "recommendations": [],
                 "follow_up_question": None,
             },
@@ -182,3 +186,32 @@ async def test_consultant_client_rejects_malformed_success_response() -> None:
                     simulation_result=None,
                 )
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("consequences", ["missing", None, {}, [
+    {"title": "Эффект", "explanation": "Пояснение"}
+] * 6, [{"title": "", "explanation": "Пояснение"}]])
+async def test_consultant_client_rejects_invalid_consequences(consequences) -> None:
+    payload = {
+        "answer": "Ответ",
+        "strengths": [],
+        "risks": [],
+        "recommendations": [],
+        "follow_up_question": None,
+    }
+    if consequences != "missing":
+        payload["consequences"] = consequences
+
+    async with httpx.AsyncClient(
+        base_url="http://consultant.test",
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)),
+    ) as client:
+        gateway = HttpxConsultantGateway(
+            base_url="http://unused.test", timeout_seconds=1, client=client,
+        )
+        with pytest.raises(ConsultantServiceError, match="invalid_ai_response"):
+            await gateway.generate(ConsultantRequest(
+                message="Вопрос", history=(), selected_measures=(),
+                budget_remaining=100, simulation_result=None,
+            ))

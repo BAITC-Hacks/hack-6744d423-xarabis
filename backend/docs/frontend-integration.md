@@ -925,6 +925,7 @@ export interface ConsultantResponse {
   answer: string;
   strengths: ConsultantBlock[];
   risks: ConsultantBlock[];
+  consequences: ConsultantBlock[];
   recommendations: ConsultantBlock[];
   follow_up_question: string | null;
 }
@@ -996,7 +997,7 @@ export function createConsultantClient(scenarioId: UUID): ConsultantClient {
 Отображение ответа:
 
 - `answer` показывать всегда;
-- пустые `strengths`, `risks` и `recommendations` не рендерить;
+- пустые `strengths`, `risks`, `consequences` и `recommendations` не рендерить;
 - `follow_up_question` не показывать, если он `null`;
 - весь текст считать обычным текстом, не HTML;
 - предусмотреть ожидание до 45 секунд, ошибку и ручной retry;

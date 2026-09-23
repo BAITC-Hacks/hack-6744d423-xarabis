@@ -13,7 +13,35 @@ def request_data():
 
 def report_data():
     return {"answer": "Лаг — задержка до начала действия мероприятия.", "strengths": [],
-            "risks": [], "recommendations": [], "follow_up_question": None}
+            "risks": [], "consequences": [], "recommendations": [], "follow_up_question": None}
+
+
+def test_consequences_are_required_even_when_empty():
+    data = report_data()
+    del data['consequences']
+    with pytest.raises(ValidationError) as error:
+        ChatResponse.model_validate(data)
+    assert error.value.errors()[0]['loc'] == ('consequences',)
+    assert error.value.errors()[0]['type'] == 'missing'
+
+
+def test_consequences_preserve_up_to_five_analysis_blocks():
+    data = report_data()
+    data['consequences'] = [{'title': f'Последствие {i}', 'explanation': 'Качественный прогноз по выбранному плану.'}
+                            for i in range(5)]
+    assert ChatResponse.model_validate(data).model_dump() == data
+
+
+@pytest.mark.parametrize('value,error_type', [(None, 'list_type'), ('forecast', 'list_type'),
+    ([{}], 'missing'), ([{'title': ' ', 'explanation': 'why'}], 'string_too_short'),
+    ([{'title': 'effect', 'explanation': ''}], 'string_too_short'),
+    ([{'title': 'effect', 'explanation': 'why'}] * 6, 'too_long')])
+def test_rejects_invalid_consequences(value, error_type):
+    data = report_data(); data['consequences'] = value
+    with pytest.raises(ValidationError) as error:
+        ChatResponse.model_validate(data)
+    assert error.value.errors()[0]['loc'][0] == 'consequences'
+    assert error.value.errors()[0]['type'] == error_type
 
 
 def simulation_data():

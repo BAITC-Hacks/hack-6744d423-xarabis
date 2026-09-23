@@ -76,6 +76,7 @@ export interface ConsultantResponse {
   answer: string;
   strengths: ConsultantBlock[];
   risks: ConsultantBlock[];
+  consequences: ConsultantBlock[];
   recommendations: ConsultantBlock[];
   follow_up_question: string | null;
 }

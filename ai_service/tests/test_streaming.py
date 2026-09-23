@@ -62,6 +62,8 @@ def parse_events(text):
 
 def test_stream_returns_decoded_answer_chunks_then_a_validated_report():
     report = report_data()
+    report['consequences'] = [{'title': 'Доступность образования',
+        'explanation': 'Выбранная школа может улучшить доступность образования; результат хода ещё не рассчитан.'}]
     report['answer'] = 'Нура: "школа"\nПарк 🌳 и путь C:\\город'
     raw = json.dumps(report, ensure_ascii=True)
     upstream = ByteStream([delta(raw[i:i+3]) for i in range(0, len(raw), 3)] + [completed(report)])
@@ -79,11 +81,13 @@ def test_stream_returns_decoded_answer_chunks_then_a_validated_report():
     assert all(name == 'answer_delta' for name, _ in events[:-1])
     assert sent[0]['stream'] is True and sent[0]['store'] is False
     assert sent[0]['text']['format']['strict'] is True
+    assert 'consequences' in sent[0]['text']['format']['schema']['required']
     assert len(sent) == 1 and upstream.closed
 
 
 @pytest.mark.parametrize('kind,code', [('eof', 'invalid_ai_response'),
     ('incomplete', 'invalid_ai_response'), ('invalid_report', 'invalid_ai_response'),
+    ('missing_consequences', 'invalid_ai_response'),
     ('refusal', 'ai_refusal'), ('failed', 'ai_unavailable'),
     ('bad_delta', 'invalid_ai_response')])
 def test_failed_stream_has_one_sanitized_error_and_no_complete_event(kind, code):
@@ -94,6 +98,9 @@ def test_failed_stream_has_one_sanitized_error_and_no_complete_event(kind, code)
     if kind == 'invalid_report':
         invalid = report_data(); del invalid['risks']
         events.append(completed(invalid))
+    if kind == 'missing_consequences':
+        invalid = report_data(); del invalid['consequences']
+        events = [delta(json.dumps(invalid)), completed(invalid)]
     if kind == 'refusal':
         events.append({'type': 'response.refusal.delta', 'delta': 'PRIVATE_PROVIDER_DETAILS',
                        'item_id': 'msg_test', 'output_index': 0, 'content_index': 0, 'sequence_number': 2})

@@ -7,6 +7,8 @@ import {
   type ConsultantResponse,
 } from "./consultant";
 import { DISTRICTS, MEASURES, type DistrictId } from "./caseData";
+import { getScenarioAutomaticAnalysis } from "./automaticAnalysis";
+const AUTO_QUESTION = "Оцени мой сценарий по последнему расчёту: проанализируй выбранные решения, их стоимость и влияние на показатели. Дай итоговую оценку, сильные стороны, риски, возможные последствия и рекомендации. Отделяй результаты модели от предположений.";
 
 function ResponseGroup({
   title,
@@ -34,6 +36,7 @@ function Report({ response }: { response: ConsultantResponse }) {
       <p>{response.answer}</p>
       <ResponseGroup title="Сильные стороны" items={response.strengths} />
       <ResponseGroup title="Риски" items={response.risks} />
+      <ResponseGroup title="Возможные последствия" items={response.consequences} />
       <ResponseGroup title="Рекомендации" items={response.recommendations} />
       {response.follow_up_question && (
         <p className="consultant-followup">{response.follow_up_question}</p>
@@ -55,18 +58,22 @@ function describeChatError(reason: unknown) {
     return reason.message;
   }
   if (reason instanceof DOMException && reason.name === "AbortError")
-    return "Ответ не пришёл за 45 секунд. Проверь историю перед повтором.";
+    return "Время ожидания ответа истекло. Проверь историю перед повтором.";
   return "Не удалось связаться с консультантом. Проверь Python API и повтори запрос вручную.";
 }
 
 export function ScenarioConsultantPanel({
   scenarioId,
   live,
+  scenarioVersion,
+  automaticAnalysis,
   onSelectDistrict,
   onSelectMeasure,
 }: {
   scenarioId: string | null;
   live: boolean;
+  scenarioVersion: number | null;
+  automaticAnalysis: {scenarioId: string; version: number} | null;
   onSelectDistrict?: (id: DistrictId) => void;
   onSelectMeasure?: (id: string) => void;
 }) {
@@ -74,8 +81,12 @@ export function ScenarioConsultantPanel({
     () => (scenarioId ? createConsultantClient(scenarioId) : null),
     [scenarioId],
   );
-  const scenarioRef = useRef(scenarioId);
-  scenarioRef.current = scenarioId;
+  const contextKey = `${scenarioId}:${scenarioVersion}`;
+  const scenarioRef = useRef(contextKey);
+  scenarioRef.current = contextKey;
+  const mounted = useRef(true);
+  const pendingRequest = useRef<AbortController | null>(null);
+  const automatic = getScenarioAutomaticAnalysis();
   const [message, setMessage] = useState("");
   const [lastMessage, setLastMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -89,6 +100,9 @@ export function ScenarioConsultantPanel({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    mounted.current = true;
+    pendingRequest.current?.abort();
+    pendingRequest.current = null;
     setMessages([]);
     setPendingAnswer(null);
     setError("");
@@ -96,7 +110,7 @@ export function ScenarioConsultantPanel({
     setHistoryBusy(false);
     setBusy(false);
     setLastMessage("");
-    if (!live || !client) return;
+    if (!live || !client) return () => { mounted.current = false; };
     const controller = new AbortController();
     setHistoryBusy(true);
     client
@@ -111,49 +125,59 @@ export function ScenarioConsultantPanel({
       .finally(() => {
         if (!controller.signal.aborted) setHistoryBusy(false);
       });
-    return () => controller.abort();
-  }, [client, live]);
+    return () => { mounted.current = false; controller.abort(); pendingRequest.current?.abort(); };
+  }, [client, live, scenarioVersion]);
 
   async function refreshHistory() {
     if (!client || !live || !scenarioId) return;
-    const id = scenarioId;
+    const id = contextKey;
     setHistoryBusy(true);
     setHistoryError("");
     try {
       const history = await client.getMessages();
-      if (scenarioRef.current !== id) return;
+      if (!mounted.current || scenarioRef.current !== id) return;
       setMessages(history);
       setPendingAnswer(null);
     } catch (reason) {
-      if (scenarioRef.current === id)
+      if (mounted.current && scenarioRef.current === id)
         setHistoryError(describeChatError(reason));
     } finally {
-      if (scenarioRef.current === id) setHistoryBusy(false);
+      if (mounted.current && scenarioRef.current === id) setHistoryBusy(false);
     }
   }
 
   async function send(text: string) {
-    if (!text.trim() || busy || !live || !client || !scenarioId) return;
-    const id = scenarioId;
+    if (!text.trim() || pendingRequest.current || !live || !client || !scenarioId) return;
+    const id = contextKey;
     const question = text.trim();
     setBusy(true);
     setError("");
     setLastMessage(question);
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 45_000);
+    pendingRequest.current = controller;
+    const timer = window.setTimeout(() => controller.abort(), 65_000);
     try {
       const report = await client.sendMessage(question, controller.signal);
-      if (scenarioRef.current !== id) return;
+      if (!mounted.current || scenarioRef.current !== id) return;
       setPendingAnswer({ question, report });
       setMessage("");
       await refreshHistory();
     } catch (reason) {
-      if (scenarioRef.current === id) setError(describeChatError(reason));
+      if (mounted.current && scenarioRef.current === id) setError(describeChatError(reason));
     } finally {
       window.clearTimeout(timer);
-      if (scenarioRef.current === id) setBusy(false);
+      if (pendingRequest.current === controller) pendingRequest.current = null;
+      if (mounted.current && scenarioRef.current === id) setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!automaticAnalysis || !live || busy || historyBusy
+      || automaticAnalysis.scenarioId !== scenarioId
+      || automaticAnalysis.version !== scenarioVersion) return;
+    // Only explicit successful calculation supplies this trigger, never restore/render.
+    void automatic.run(contextKey, () => send(AUTO_QUESTION));
+  }, [automaticAnalysis, scenarioId, scenarioVersion, live, busy, historyBusy]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -213,6 +237,14 @@ export function ScenarioConsultantPanel({
           ? "Вопрос и история хранятся в сценарии. Контекст плана и расчёта собирает сервер; ответ может занять до 45 секунд."
           : "Для разговора с AI запусти Python API и подключи его в шапке. Деморежим не выдумывает ответ консультанта."}
       </p>
+      {automaticAnalysis?.scenarioId === scenarioId
+        && automaticAnalysis?.version === scenarioVersion && live && (
+        <div className="advisor-prompts">
+          <button disabled={busy || historyBusy} onClick={() => void send(AUTO_QUESTION)}>
+            Повторить оценку сценария
+          </button>
+        </div>
+      )}
       {live && scenarioId && (
         <div className="consultant-history" aria-live="polite">
           {historyBusy && messages.length === 0 && (

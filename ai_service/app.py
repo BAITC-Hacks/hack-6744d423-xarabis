@@ -1,5 +1,5 @@
 """HTTP boundary; the external backend owns sessions and simulation results."""
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -9,6 +9,7 @@ from .config import Settings
 from .errors import AIError
 from .provider import OpenAIProvider
 from .schemas import ChatRequest, ChatResponse, ErrorResponse
+from .streaming import ClosingStreamingResponse, encode_event
 
 
 def create_app(settings: Settings | None = None, provider: OpenAIProvider | None = None) -> FastAPI:
@@ -45,6 +46,28 @@ def create_app(settings: Settings | None = None, provider: OpenAIProvider | None
                       summary='Ответ консультанта по текущему сценарию')
     async def chat(payload: ChatRequest):
         return await configured_provider.generate(payload)
+
+    @application.post('/chat/stream', response_class=ClosingStreamingResponse,
+                      responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}},
+                                       'description': 'answer_delta, then complete or error; see README'},
+                                 422: {'model': ErrorResponse}, 503: {'model': ErrorResponse}},
+                      summary='Поток текста ответа и проверенный итоговый отчёт')
+    async def chat_stream(payload: ChatRequest):
+        if not configured_provider.settings.configured:
+            raise AIError('ai_not_configured')
+
+        async def events():
+            yield ': connected\n\n'
+            try:
+                async with aclosing(configured_provider.stream(payload)) as stream:
+                    async for name, data in stream:
+                        yield encode_event(name, data)
+            except AIError as error:
+                yield encode_event('error', error.payload())
+
+        return ClosingStreamingResponse(events(), media_type='text/event-stream',
+                                        headers={'Cache-Control': 'no-cache, no-transform',
+                                                 'X-Accel-Buffering': 'no'})
 
     return application
 

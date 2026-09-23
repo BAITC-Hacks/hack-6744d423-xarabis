@@ -2,6 +2,7 @@
 import asyncio
 from json import JSONDecodeError
 
+import anyio
 import httpx2
 from openai import APIError, APIResponseValidationError, APITimeoutError, AsyncOpenAI
 from pydantic import ValidationError
@@ -10,6 +11,7 @@ from .config import Settings
 from .errors import AIError
 from .knowledge import build_input, load_instructions
 from .schemas import ChatRequest, ChatResponse
+from .streaming import AnswerPreview
 
 
 def output_format() -> dict:
@@ -90,3 +92,59 @@ class OpenAIProvider:
     async def close(self):
         if self.client is not None:
             await self.client.close()
+
+    async def stream(self, request: ChatRequest):
+        if self.client is None:
+            raise AIError('ai_not_configured')
+        upstream = None
+        preview = AnswerPreview()
+        channel = None
+        try:
+            async with asyncio.timeout(self.settings.timeout_seconds):
+                upstream = await self.client.responses.create(
+                    model=self.settings.model.strip(),
+                    instructions=load_instructions(), input=build_input(request),
+                    text={'format': output_format()}, store=False, stream=True,
+                    max_output_tokens=self.settings.max_output_tokens,
+                )
+                async for event in upstream:
+                    kind = getattr(event, 'type', None)
+                    if not isinstance(kind, str):
+                        raise AIError('invalid_ai_response')
+                    if kind == 'response.output_text.delta':
+                        current = (getattr(event, 'item_id', None),
+                                   getattr(event, 'output_index', None),
+                                   getattr(event, 'content_index', None))
+                        if channel is not None and current != channel:
+                            raise AIError('invalid_ai_response')
+                        channel = current
+                        difference = preview.feed(getattr(event, 'delta', None))
+                        if difference:
+                            yield 'answer_delta', {'delta': difference}
+                    elif kind in ('response.refusal.delta', 'response.refusal.done'):
+                        raise AIError('ai_refusal')
+                    elif kind in ('response.failed', 'error'):
+                        raise AIError('ai_unavailable')
+                    elif kind == 'response.incomplete':
+                        raise AIError('invalid_ai_response')
+                    elif kind == 'response.completed':
+                        report = parse_report(getattr(event, 'response', None))
+                        if preview.raw and ChatResponse.model_validate_json(preview.raw) != report:
+                            raise AIError('invalid_ai_response')
+                        if not report.answer.startswith(preview.text.rstrip()):
+                            raise AIError('invalid_ai_response')
+                        if len(report.answer) > len(preview.text):
+                            yield 'answer_delta', {'delta': report.answer[len(preview.text):]}
+                        yield 'complete', report.model_dump(mode='json')
+                        return
+                raise AIError('invalid_ai_response')
+        except (APITimeoutError, TimeoutError) as exc:
+            raise AIError('ai_timeout') from exc
+        except (ValidationError, APIResponseValidationError, JSONDecodeError, UnicodeError) as exc:
+            raise AIError('invalid_ai_response') from exc
+        except APIError as exc:
+            raise AIError('ai_unavailable') from exc
+        finally:
+            if upstream is not None:
+                with anyio.CancelScope(shield=True):
+                    await upstream.close()

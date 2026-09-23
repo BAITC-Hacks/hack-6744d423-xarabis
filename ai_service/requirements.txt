@@ -4,3 +4,5 @@ openai==3.19.0
 httpx2==2.13.1
 uvicorn==0.53.0
 python-dotenv==1.2.3
+anyio==4.15.1
+jiter==0.17.0

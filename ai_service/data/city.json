@@ -1,0 +1,62 @@
+{
+  "name": "Учебный синтетический датасет районов",
+  "source": "https://docs.google.com/document/d/1Uc-GdGoKhDY-spu8V50-ZMm33t2CjYLP/preview",
+  "snapshot_date": "2026-09-23",
+  "notice": "Условные данные для хакатона; не реальные актуальные показатели Астаны. Правила отражают этот документ; его статус относительно первоначального задания должен подтвердить организатор.",
+  "indicator_scale": "0–100; больше всегда лучше. Транспортная нагрузка и загрязнение уже перевёрнуты.",
+  "indicators": {
+    "T1": "Разгрузка дорог: 100 — нет пробок в час пик",
+    "T2": "Доступность общественного транспорта: 100 — все жители в 500 м от остановки с интервалом не более 10 минут",
+    "E1": "Озеленение: 100 — не менее 20 квадратных метров зелени на жителя",
+    "E2": "Качество воздуха: 100 — зимой AQI не более 50",
+    "S1": "Школы и детсады: 100 — нормативная потребность обеспечена, без второй смены",
+    "S2": "Поликлиники и первичная помощь: 100 — норматив на жителя выполнен",
+    "B1": "Безопасность улиц: освещение, камеры, минимум происшествий",
+    "B2": "Безопасность дорожного движения: минимум ДТП с пострадавшими",
+    "C1": "Надёжность ЖКХ: отсутствие аварий отопления и воды",
+    "C2": "Скорость решения обращений: все обращения закрыты в срок"
+  },
+  "districts": [
+    {"id":"esil","name":"Есиль","population_share":0.27,"indicators":{"T1":45,"T2":62,"E1":68,"E2":72,"S1":48,"S2":55,"B1":78,"B2":60,"C1":75,"C2":70},"baseline_district_score":62.99},
+    {"id":"almaty","name":"Алматы","population_share":0.24,"indicators":{"T1":40,"T2":75,"E1":50,"E2":55,"S1":60,"S2":65,"B1":62,"B2":52,"C1":50,"C2":60},"baseline_district_score":57.06},
+    {"id":"saryarka","name":"Сарыарка","population_share":0.20,"indicators":{"T1":50,"T2":70,"E1":42,"E2":40,"S1":62,"S2":68,"B1":58,"B2":55,"C1":45,"C2":55},"baseline_district_score":54.65},
+    {"id":"baikonur","name":"Байконур","population_share":0.13,"indicators":{"T1":52,"T2":68,"E1":55,"E2":50,"S1":58,"S2":60,"B1":52,"B2":58,"C1":55,"C2":58},"baseline_district_score":56.63},
+    {"id":"nura","name":"Нура","population_share":0.16,"indicators":{"T1":55,"T2":40,"E1":45,"E2":65,"S1":38,"S2":35,"B1":55,"B2":50,"C1":60,"C2":50},"baseline_district_score":49.18}
+  ],
+  "measures": [
+    {"id":"M1","direction":"transport","name":"Выделенные полосы для автобусов","scope":"district","cost":18,"lag_quarters":2,"effects":{"T1":6,"T2":9}},
+    {"id":"M2","direction":"transport","name":"Умные светофоры","scope":"city","cost":22,"lag_quarters":2,"effects":{"T1":4,"B2":3}},
+    {"id":"M3","direction":"transport","name":"Линия ЛРТ или расширение","scope":"district","cost":30,"lag_quarters":4,"effects":{"T1":16,"T2":20,"E2":4}},
+    {"id":"M4","direction":"ecology","name":"Парк или сквер","scope":"district","cost":15,"lag_quarters":2,"effects":{"E1":12,"E2":3,"B1":2}},
+    {"id":"M5","direction":"ecology","name":"Перевод частного сектора на чистое топливо","scope":"district","cost":25,"lag_quarters":3,"effects":{"E2":14,"C1":4}},
+    {"id":"M6","direction":"ecology","name":"Городская программа озеленения и ветрозащитных полос","scope":"city","cost":20,"lag_quarters":4,"effects":{"E1":5,"E2":3}},
+    {"id":"M7","direction":"social","name":"Школа и детсад — модульное строительство","scope":"district","cost":24,"lag_quarters":3,"effects":{"S1":16}},
+    {"id":"M8","direction":"social","name":"Центр семейного здоровья или поликлиника","scope":"district","cost":20,"lag_quarters":3,"effects":{"S2":14}},
+    {"id":"M9","direction":"social","name":"Дворовые спорт-хабы","scope":"district","cost":10,"lag_quarters":1,"effects":{"S1":3,"S2":3,"B1":3}},
+    {"id":"M10","direction":"safety","name":"Освещение и камеры — расширение Safe City","scope":"district","cost":12,"lag_quarters":1,"effects":{"B1":12,"B2":2}},
+    {"id":"M11","direction":"safety","name":"Безопасные переходы и школьные зоны","scope":"district","cost":10,"lag_quarters":1,"effects":{"B2":12,"T1":-2}},
+    {"id":"M12","direction":"services","name":"Единая цифровая платформа обращений","scope":"city","cost":14,"lag_quarters":1,"effects":{"C2":5}},
+    {"id":"M13","direction":"services","name":"Модернизация тепло- и водосетей","scope":"district","cost":28,"lag_quarters":4,"effects":{"C1":18,"E2":2}},
+    {"id":"M14","direction":"services","name":"Аварийные бригады ЖКХ и раннее оповещение","scope":"city","cost":16,"lag_quarters":1,"effects":{"C1":5,"C2":2}}
+  ],
+  "rules": {
+    "budget":100,"decisions":5,"max_per_direction":2,"repeated_measures_allowed":false,
+    "horizon_quarters":8,"realized_effect_fraction":"(8 - lag_quarters) / 8",
+    "effect_note":"В каталоге полные эффекты до учёта лага. Для городской меры эффект относится ко всем пяти районам.",
+    "synergies":[
+      {"measure_ids":["M1","M2"],"target":"district of M1","effects":{"T1":2}},
+      {"measure_ids":["M10","M12"],"target":"district of M10","effects":{"B1":2}},
+      {"measure_ids":["M5","M6"],"target":"district of M5","effects":{"E2":2}}
+    ],
+    "synergy_note":"Синергии фиксированные; лагом не масштабируются.",
+    "incompatibilities":[
+      {"measure_ids":["M1","M3"],"scope":"any_district"},
+      {"measure_ids":["M4","M7"],"scope":"same_district"},
+      {"measure_ids":["M5","M13"],"scope":"same_district"}
+    ],
+    "weights":{"T1":0.10,"T2":0.10,"E1":0.09,"E2":0.11,"S1":0.11,"S2":0.11,"B1":0.09,"B2":0.09,"C1":0.10,"C2":0.10},
+    "score_formula":"0.7 * population_weighted_district_score + 0.3 * minimum_district_score - count_of_indicators_strictly_below_40",
+    "baseline_score":52.55768,
+    "note":"Порядок решений не влияет на результат. Остаток бюджета не даёт бонуса. Невалидный набор не получает Score. Расчёты выполняет внешний симулятор, не консультант."
+  }
+}

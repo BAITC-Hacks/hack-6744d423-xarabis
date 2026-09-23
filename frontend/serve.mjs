@@ -20,6 +20,8 @@ const mimeTypes = {
   ".js": "application/javascript",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".geojson": "application/geo+json; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".ico": "image/x-icon",
@@ -78,8 +80,15 @@ createServer(async (request, response) => {
     return;
   }
   const extension = target.slice(target.lastIndexOf("."));
+  if ((extension === ".geojson" || extension === ".json") && /\bgzip\b/i.test(request.headers["accept-encoding"] ?? "")) {
+    if (await sendFile(response, `${target}.gz`, {
+      "Content-Type": mimeTypes[extension],
+      "Content-Encoding": "gzip",
+      Vary: "Accept-Encoding",
+    })) return;
+  }
   if (await sendFile(response, target, { "Content-Type": mimeTypes[extension] ?? "application/octet-stream" })) return;
-  if (pathname.startsWith("/assets/") || pathname.startsWith("/unity/")) {
+  if (pathname.startsWith("/assets/") || pathname.startsWith("/unity/") || pathname.startsWith("/data/")) {
     response.writeHead(404).end();
     return;
   }

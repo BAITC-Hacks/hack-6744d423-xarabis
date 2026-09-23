@@ -1,0 +1,69 @@
+{
+  "sourceDateUtc": "2026-09-23T11:33:27Z",
+  "sourceLicense": "Open Database License (ODbL) 1.0",
+  "sourceAttribution": "© OpenStreetMap contributors",
+  "districtIds": [
+    "esil",
+    "almaty",
+    "saryarka",
+    "baikonur",
+    "nura"
+  ],
+  "sourceCounts": {
+    "districts": 5,
+    "roads": 2418,
+    "rivers": 29,
+    "parks": 110,
+    "buildings": 506
+  },
+  "triangulationFailures": {},
+  "atlasBytes": 787278,
+  "atlasGzipBytes": 223662,
+  "meshVertices": {
+    "esil": {
+      "boundary": 77,
+      "outline": 308,
+      "roads": 3884,
+      "river": 36,
+      "parks": 186,
+      "roofs": 414,
+      "walls": 1656
+    },
+    "almaty": {
+      "boundary": 82,
+      "outline": 328,
+      "roads": 2280,
+      "river": 0,
+      "parks": 226,
+      "roofs": 827,
+      "walls": 3308
+    },
+    "saryarka": {
+      "boundary": 146,
+      "outline": 584,
+      "roads": 1712,
+      "river": 48,
+      "parks": 100,
+      "roofs": 674,
+      "walls": 2696
+    },
+    "baikonur": {
+      "boundary": 117,
+      "outline": 468,
+      "roads": 2232,
+      "river": 0,
+      "parks": 294,
+      "roofs": 407,
+      "walls": 1628
+    },
+    "nura": {
+      "boundary": 129,
+      "outline": 516,
+      "roads": 1728,
+      "river": 240,
+      "parks": 79,
+      "roofs": 233,
+      "walls": 932
+    }
+  }
+}

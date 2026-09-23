@@ -1,0 +1,75 @@
+{
+  "passed": true,
+  "districtIds": [
+    "almaty",
+    "baikonur",
+    "esil",
+    "nura",
+    "saryarka"
+  ],
+  "gridSamplePoints": 14400,
+  "gridOverlapPoints": 0,
+  "gridPointsInsideByDistrict": {
+    "esil": 1366,
+    "nura": 1318,
+    "almaty": 651,
+    "baikonur": 1288,
+    "saryarka": 479
+  },
+  "featureCountsByLayerAndDistrict": {
+    "districts": {
+      "esil": 1,
+      "almaty": 1,
+      "saryarka": 1,
+      "baikonur": 1,
+      "nura": 1
+    },
+    "roads": {
+      "esil": 822,
+      "saryarka": 349,
+      "baikonur": 449,
+      "nura": 323,
+      "almaty": 475
+    },
+    "rivers": {
+      "nura": 13,
+      "esil": 3,
+      "saryarka": 12,
+      "baikonur": 1
+    },
+    "parks": {
+      "saryarka": 17,
+      "almaty": 25,
+      "nura": 10,
+      "esil": 16,
+      "baikonur": 42
+    },
+    "buildings": {
+      "esil": 44,
+      "saryarka": 160,
+      "baikonur": 85,
+      "nura": 57,
+      "almaty": 160
+    }
+  },
+  "vertexCounts": {
+    "districts": 559,
+    "roads": 5377,
+    "rivers": 282,
+    "parks": 995,
+    "buildings": 3061
+  },
+  "namedEsilRiverSegments": 12,
+  "checks": [
+    "GeoJSON parse",
+    "gzip round trip",
+    "manifest byte and feature counts",
+    "coordinate ranges",
+    "closed polygon rings",
+    "five requested districts present",
+    "urban probe inside each district",
+    "no district overlaps on 120x120 grid",
+    "roads and sampled buildings in each district",
+    "named Esil river present"
+  ]
+}

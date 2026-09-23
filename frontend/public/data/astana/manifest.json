@@ -1,0 +1,158 @@
+{
+  "title": "Astana OSM WebGL sample",
+  "downloadedAtUtc": "2026-09-23T11:27:56Z",
+  "source": "OpenStreetMap contributors",
+  "sourceUrls": [
+    "https://www.openstreetmap.org/",
+    "https://overpass-api.de/api/interpreter",
+    "https://api.openstreetmap.org/api/0.6/map"
+  ],
+  "dataTimestampOsmBaseUtc": {
+    "districts": "2026-09-22T08:45:51Z",
+    "transport": "2026-09-22T08:45:51Z",
+    "buildings": {
+      "esil": "2026-09-23T11:26:05Z",
+      "almaty": null,
+      "saryarka": "2026-09-22T08:45:51Z",
+      "baikonur": "2026-09-22T08:45:51Z",
+      "nura": null
+    }
+  },
+  "license": "Open Database License (ODbL) 1.0",
+  "licenseUrl": "https://www.openstreetmap.org/copyright",
+  "attribution": "© OpenStreetMap contributors",
+  "crs": "EPSG:4326 (WGS84 longitude, latitude)",
+  "localTransform": {
+    "originLonLat": [
+      71.43,
+      51.16
+    ],
+    "earthRadiusMeters": 6378137.0,
+    "xMeters": "R * radians(lon - originLon) * cos(radians(originLat))",
+    "zMeters": "R * radians(lat - originLat)",
+    "yMeters": 0,
+    "note": "Local tangent-plane approximation for display; no elevation in OSM extract."
+  },
+  "districts": [
+    {
+      "districtId": "esil",
+      "osmRelationId": 3479876,
+      "sourceUrl": "https://www.openstreetmap.org/relation/3479876"
+    },
+    {
+      "districtId": "almaty",
+      "osmRelationId": 3482819,
+      "sourceUrl": "https://www.openstreetmap.org/relation/3482819"
+    },
+    {
+      "districtId": "saryarka",
+      "osmRelationId": 3486954,
+      "sourceUrl": "https://www.openstreetmap.org/relation/3486954"
+    },
+    {
+      "districtId": "baikonur",
+      "osmRelationId": 8593081,
+      "sourceUrl": "https://www.openstreetmap.org/relation/8593081"
+    },
+    {
+      "districtId": "nura",
+      "osmRelationId": 20593940,
+      "sourceUrl": "https://www.openstreetmap.org/relation/20593940"
+    }
+  ],
+  "buildingSample": {
+    "probeRadiusMeters": 450,
+    "maxPerDistrict": 160,
+    "probeLatLon": {
+      "esil": [
+        51.11,
+        71.43
+      ],
+      "almaty": [
+        51.15,
+        71.52
+      ],
+      "saryarka": [
+        51.19,
+        71.39
+      ],
+      "baikonur": [
+        51.19,
+        71.45
+      ],
+      "nura": [
+        51.16,
+        71.35
+      ]
+    },
+    "eligibleCounts": {
+      "esil": 46,
+      "almaty": 420,
+      "saryarka": 660,
+      "baikonur": 96,
+      "nura": 88
+    },
+    "selectedCounts": {
+      "esil": 44,
+      "almaty": 160,
+      "saryarka": 160,
+      "baikonur": 85,
+      "nura": 57
+    },
+    "apiSourceUrls": {
+      "nura": "https://api.openstreetmap.org/api/0.6/map?bbox=71.343411,51.155868,71.356589,51.164132",
+      "almaty": "https://api.openstreetmap.org/api/0.6/map?bbox=71.513412,51.145868,71.526588,51.154132"
+    },
+    "osmWayTimestampRangesUtc": {
+      "nura": [
+        "2026-03-11T06:04:30Z",
+        "2026-08-04T10:45:21Z"
+      ],
+      "almaty": [
+        "2026-03-11T06:03:12Z",
+        "2026-05-14T09:38:48Z"
+      ]
+    }
+  },
+  "simplificationMeters": {
+    "districts": 25,
+    "roads": 12,
+    "rivers": 12,
+    "parks": 5,
+    "buildings": 1.5
+  },
+  "files": {
+    "districts": {
+      "features": 5,
+      "bytes": 12042,
+      "gzipBytes": 3355
+    },
+    "roads": {
+      "features": 2418,
+      "bytes": 732182,
+      "gzipBytes": 58804
+    },
+    "rivers": {
+      "features": 29,
+      "bytes": 11708,
+      "gzipBytes": 2266
+    },
+    "parks": {
+      "features": 110,
+      "bytes": 38834,
+      "gzipBytes": 7138
+    },
+    "buildings": {
+      "features": 506,
+      "bytes": 163099,
+      "gzipBytes": 17171
+    }
+  },
+  "limitations": [
+    "The five requested districts do not cover the sixth current district, Sarayshyq.",
+    "Buildings are a small urban sample near one point in each district.",
+    "Roads, rivers and parks are OSM ways; park multipolygon relations are not included.",
+    "Ways are assigned by midpoint; geometries crossing a district edge are not clipped."
+  ],
+  "completedAtUtc": "2026-09-23T11:33:27Z"
+}

@@ -7,27 +7,30 @@ import { fileURLToPath } from "node:url";
 
 function unityGzipAssets(): Plugin {
   const webRoot = fileURLToPath(new URL(".", import.meta.url));
-  const buildRoot = resolve(webRoot, "public/unity/Build");
+  const unityRoot = resolve(webRoot, "public/unity");
   const contentTypes: Record<string, string> = {
-    "unity.data": "application/octet-stream",
-    "unity.framework.js": "application/javascript",
-    "unity.loader.js": "application/javascript",
-    "unity.wasm": "application/wasm",
+    "Build/unity.data": "application/octet-stream",
+    "Build/unity.framework.js": "application/javascript",
+    "Build/unity.loader.js": "application/javascript",
+    "Build/unity.wasm": "application/wasm",
+    "geo/astana-atlas.json": "application/json; charset=utf-8",
   };
 
   const serveCompressedAsset: Connect.NextHandleFunction = (request, response, next) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-    const prefix = "/unity/Build/";
+    const prefix = "/unity/";
     if (!pathname.startsWith(prefix)) return next();
 
-    const requestedName = decodeURIComponent(pathname.slice(prefix.length));
+    let requestedName: string;
+    try { requestedName = decodeURIComponent(pathname.slice(prefix.length)); }
+    catch { response.statusCode = 400; response.end(); return; }
     const isExplicitGzip = requestedName.endsWith(".gz");
     const sourceName = isExplicitGzip ? requestedName.slice(0, -3) : requestedName;
     if (!Object.hasOwn(contentTypes, sourceName)) return next();
 
-    const rawPath = resolve(buildRoot, sourceName);
+    const rawPath = resolve(unityRoot, sourceName);
     const gzipPath = `${rawPath}.gz`;
-    if (!rawPath.startsWith(`${buildRoot}${sep}`)) return next();
+    if (!rawPath.startsWith(`${unityRoot}${sep}`)) return next();
     const acceptsGzip = /(?:^|,)\s*gzip(?:\s*;[^,]*)?(?:,|$)/i.test(request.headers["accept-encoding"] ?? "");
     const serveGzip = isExplicitGzip || (acceptsGzip && existsSync(gzipPath));
     const filePath = serveGzip ? gzipPath : rawPath;

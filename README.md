@@ -1,9 +1,25 @@
-# hack-6744d423-xarabis
-Hackathon team repository for Xarabis
-Astana Innovations
-Akim
+# Аким на 5 часов
 
-## ИИ-консультант
+Симулятор решений для районов Астаны: пользователь выбирает меры, Python API проверяет план и рассчитывает показатели и городской Score. Интерфейс показывает изменения по районам и условный интерактивный 3D-макет. Это хакатонный прототип; геометрия и демоданные карты не являются точной моделью города.
 
-Инструкция по установке, настройке `ai_service/.env`, запуску на Windows/Linux/macOS и развёртыванию для DevOps: [ai_service/README.md](ai_service/README.md).
-Unity Blender 
+## Где что лежит
+
+| Папка | Ответственность |
+| --- | --- |
+| [`frontend/`](frontend/README.md) | React-интерфейс, Unity WebGL-сборка, локальный веб-сервер и прокси к API |
+| [`backend/`](backend/README.md) | Python API, правила и расчёты симулятора, хранение сценариев |
+| [`ai_service/`](ai_service/README.md) | Отдельный AI-консультант; пока не подключён к интерфейсу через основной API |
+
+Фронтенд не реализует расчёты и не хранит API-ключи. Контракт данных: [`backend/docs/frontend-integration.md`](backend/docs/frontend-integration.md).
+
+## Быстрый запуск интерфейса
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Открыть <http://localhost:5173/>. Для настоящего расчёта отдельно запустите Python API на `http://127.0.0.1:8000` по инструкции [`backend/README.md`](backend/README.md). Без него интерфейс явно показывает деморежим: произвольные решения не рассчитываются.
+
+Подробные команды сборки и размещения, ограничения Unity WebGL и сценарий проверки — в [`frontend/README.md`](frontend/README.md).

@@ -1,56 +1,65 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from city_simulator.domain.entities import (
-    Decision,
-    District,
-    Measure,
-    ScenarioAnalysis,
-    ScenarioResult,
+from city_simulator.domain.entities import Decision, ScenarioResult, SimulationDataset
+from city_simulator.domain.ports import CityDataRepository
+from city_simulator.domain.services import (
+    CalculationScenarioValidator,
+    DraftScenarioValidator,
+    ScoreCalculator,
 )
-from city_simulator.domain.ports import CityDataRepository, ScenarioAnalyst
-from city_simulator.domain.services import ScenarioValidator, ScoreCalculator
 
 
 @dataclass(frozen=True, slots=True)
-class SimulationOutput:
-    result: ScenarioResult
-    analysis: ScenarioAnalysis
+class DraftValidationOutput:
+    decision_count: int
+    total_cost: int
+    remaining_budget: int
+    ready_for_calculation: bool
 
 
 class GetCatalogUseCase:
     def __init__(self, repository: CityDataRepository) -> None:
         self.repository = repository
 
-    def districts(self) -> Sequence[District]:
-        return self.repository.list_districts()
+    def dataset(self) -> SimulationDataset:
+        return self.repository.get_dataset()
 
-    def measures(self) -> Sequence[Measure]:
-        return self.repository.list_measures()
+
+class ValidateDraftScenarioUseCase:
+    def __init__(
+        self,
+        repository: CityDataRepository,
+        validator: DraftScenarioValidator,
+    ) -> None:
+        self.repository = repository
+        self.validator = validator
+
+    def execute(self, decisions: Sequence[Decision]) -> DraftValidationOutput:
+        dataset = self.repository.get_dataset()
+        self.validator.validate(decisions, dataset)
+        measure_by_id = {measure.id: measure for measure in dataset.measures}
+        total_cost = sum(measure_by_id[item.measure_id.upper()].cost for item in decisions)
+        return DraftValidationOutput(
+            decision_count=len(decisions),
+            total_cost=total_cost,
+            remaining_budget=dataset.rules.budget - total_cost,
+            ready_for_calculation=len(decisions) == dataset.rules.required_decisions,
+        )
 
 
 class SimulateScenarioUseCase:
     def __init__(
         self,
         repository: CityDataRepository,
-        validator: ScenarioValidator,
+        validator: CalculationScenarioValidator,
         calculator: ScoreCalculator,
-        analyst: ScenarioAnalyst,
     ) -> None:
         self.repository = repository
         self.validator = validator
         self.calculator = calculator
-        self.analyst = analyst
 
-    def execute(self, decisions: Sequence[Decision]) -> SimulationOutput:
-        districts = self.repository.list_districts()
-        measures = self.repository.list_measures()
-        self.validator.validate(decisions, districts, measures)
-        result = self.calculator.calculate(decisions, districts, measures)
-        selected = [self.repository.get_measure(item.measure_id.upper()) for item in decisions]
-        analysis = self.analyst.analyze(
-            result,
-            decisions,
-            [measure for measure in selected if measure is not None],
-        )
-        return SimulationOutput(result=result, analysis=analysis)
+    def execute(self, decisions: Sequence[Decision]) -> ScenarioResult:
+        dataset = self.repository.get_dataset()
+        self.validator.validate(decisions, dataset)
+        return self.calculator.calculate(decisions, dataset)

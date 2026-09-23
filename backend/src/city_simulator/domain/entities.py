@@ -2,9 +2,22 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from city_simulator.domain.enums import Direction, IndicatorCode, MeasureScope
+from city_simulator.domain.enums import (
+    ConflictScope,
+    Direction,
+    EffectKind,
+    IndicatorCode,
+    MeasureScope,
+)
 
 IndicatorValues = Mapping[IndicatorCode, float]
+
+
+@dataclass(frozen=True, slots=True)
+class Indicator:
+    id: IndicatorCode
+    direction: Direction
+    name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +51,68 @@ class Decision:
 
 
 @dataclass(frozen=True, slots=True)
+class Synergy:
+    measure_ids: tuple[str, str]
+    target_measure_id: str
+    indicator_id: IndicatorCode
+    delta: float
+
+
+@dataclass(frozen=True, slots=True)
+class Incompatibility:
+    measure_ids: tuple[str, str]
+    scope: ConflictScope
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationRules:
+    budget: int
+    horizon_quarters: int
+    required_decisions: int
+    max_measures_per_direction: int
+    critical_threshold: float
+    city_average_weight: float
+    weakest_district_weight: float
+    critical_penalty: float
+    indicator_weights: IndicatorValues
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationDataset:
+    dataset_version: str
+    formula_version: str
+    rules: SimulationRules
+    indicators: tuple[Indicator, ...]
+    districts: tuple[District, ...]
+    measures: tuple[Measure, ...]
+    synergies: tuple[Synergy, ...]
+    incompatibilities: tuple[Incompatibility, ...]
+
+    def get_measure(self, measure_id: str) -> Measure | None:
+        normalized = measure_id.upper()
+        return next((measure for measure in self.measures if measure.id == normalized), None)
+
+    def get_district(self, district_id: str) -> District | None:
+        return next((district for district in self.districts if district.id == district_id), None)
+
+
+@dataclass(frozen=True, slots=True)
+class CriticalIndicator:
+    district_id: str
+    indicator_id: IndicatorCode
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
+class EffectTrace:
+    measure_ids: tuple[str, ...]
+    district_id: str
+    indicator_id: IndicatorCode
+    delta: float
+    kind: EffectKind
+
+
+@dataclass(frozen=True, slots=True)
 class DistrictResult:
     district_id: str
     district_name: str
@@ -49,6 +124,8 @@ class DistrictResult:
 
 @dataclass(frozen=True, slots=True)
 class ScenarioResult:
+    dataset_version: str
+    formula_version: str
     total_cost: int
     remaining_budget: int
     score_before: float
@@ -56,13 +133,7 @@ class ScenarioResult:
     score_delta: float
     city_average: float
     weakest_district_score: float
-    critical_indicators_count: int
     districts: tuple[DistrictResult, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ScenarioAnalysis:
-    summary: str
-    strengths: tuple[str, ...]
-    risks: tuple[str, ...]
-    recommendations: tuple[str, ...]
+    critical_before: tuple[CriticalIndicator, ...]
+    critical_after: tuple[CriticalIndicator, ...]
+    effects: tuple[EffectTrace, ...]

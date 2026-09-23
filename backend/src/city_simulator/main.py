@@ -3,14 +3,17 @@ from fastapi.responses import JSONResponse
 
 from city_simulator.core.config import get_settings
 from city_simulator.domain.exceptions import ScenarioValidationError
+from city_simulator.presentation.dependencies import get_repository
 from city_simulator.presentation.routes import router
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Fail fast if the bundled dataset is incomplete or internally inconsistent.
+    get_repository().get_dataset()
     application = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version="0.2.0",
         description="API симулятора управления районами Астаны.",
         debug=settings.debug,
     )

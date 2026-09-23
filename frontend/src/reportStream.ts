@@ -4,7 +4,7 @@ function validReport(value: unknown): value is ConsultantResponse {
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
   return typeof row.answer === 'string' && row.answer.length > 0
-    && ['strengths', 'risks', 'recommendations'].every(key => Array.isArray(row[key])
+    && ['strengths', 'risks', 'consequences', 'recommendations'].every(key => Array.isArray(row[key])
       && (row[key] as unknown[]).every(item => !!item && typeof item === 'object'
         && typeof (item as Record<string, unknown>).title === 'string'
         && typeof (item as Record<string, unknown>).explanation === 'string'))

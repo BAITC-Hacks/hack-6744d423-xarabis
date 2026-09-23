@@ -97,6 +97,7 @@ export function App() {
   const [referenceCalculated, setReferenceCalculated] = useState(false);
   const [notice, setNotice] = useState("");
   const [consultantOpen, setConsultantOpen] = useState(false);
+  const [automaticAnalysis, setAutomaticAnalysis] = useState<{scenarioId: string; version: number} | null>(null);
   const [presentation, setPresentation] = useState<number | null>(null);
   const appRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -328,6 +329,10 @@ export function App() {
         return;
       }
       if (!(await simulator.calculate())) return;
+      if (simulator.scenario) {
+        setAutomaticAnalysis({scenarioId: simulator.scenario.id, version: simulator.scenario.version});
+        setConsultantOpen(true);
+      }
     } else {
       if (!referenceLoaded) return;
       setReferenceCalculated(true);
@@ -781,7 +786,7 @@ export function App() {
               ) : (
                 <div className="results-content">
                   <div className="result-hero">
-                    <span>Общий индекс города</span>
+                    <span title="Индекс качества жизни города по формуле кейса">Astana Quality of Life Score</span>
                     <strong>
                       {format(scoreAfter)}
                       <small
@@ -1344,6 +1349,8 @@ export function App() {
         )}
         <ScenarioConsultantPanel
           scenarioId={live ? (simulator.scenario?.id ?? null) : null}
+          scenarioVersion={live ? (simulator.scenario?.version ?? null) : null}
+          automaticAnalysis={automaticAnalysis}
           live={live}
           onSelectDistrict={(id) => {
             setConsultantOpen(false);

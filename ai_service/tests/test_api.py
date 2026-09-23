@@ -45,7 +45,7 @@ def test_health_is_local_and_missing_configuration_is_an_explicit_chat_error():
         assert response.json()['error']['code']=='ai_not_configured'
 
 
-def test_real_http_route_sdk_and_schema_return_the_five_report_blocks():
+def test_real_http_route_sdk_and_schema_return_the_six_report_fields():
     captured=[]
     def handler(request):
         captured.append(json.loads(request.content))

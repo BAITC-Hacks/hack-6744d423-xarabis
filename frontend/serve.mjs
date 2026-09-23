@@ -8,7 +8,6 @@ import { proxyRequest } from "./proxy.mjs";
 const root = resolve(fileURLToPath(new URL("./dist/", import.meta.url)));
 const port = Number(process.env.PORT ?? 3000);
 const pythonApiUrl = process.env.PYTHON_API_URL ?? "http://127.0.0.1:8000";
-const aiApiUrl = process.env.AI_API_URL ?? "http://127.0.0.1:8001";
 const unityAssets = {
   "unity.loader.js": "application/javascript",
   "unity.data": "application/octet-stream",
@@ -41,10 +40,6 @@ async function sendFile(response, filename, headers = {}) {
 
 createServer(async (request, response) => {
   const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-  if (pathname.startsWith('/api/ai/')) {
-    await proxyRequest(request, response, aiApiUrl, request.url.slice('/api/ai'.length));
-    return;
-  }
   if (pathname.startsWith("/api/v1/")) {
     await proxyRequest(request, response, pythonApiUrl, request.url);
     return;

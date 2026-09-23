@@ -33,6 +33,7 @@ class _ReportPayload(_ContractModel):
     answer: str = Field(min_length=1, max_length=6000)
     strengths: list[_BlockPayload] = Field(max_length=5)
     risks: list[_BlockPayload] = Field(max_length=5)
+    consequences: list[_BlockPayload] = Field(max_length=5)
     recommendations: list[_BlockPayload] = Field(max_length=5)
     follow_up_question: str | None = Field(min_length=1, max_length=500)
 
@@ -78,6 +79,10 @@ class HttpxConsultantGateway(ConsultantGateway):
             recommendations=tuple(
                 AnalysisBlock(title=item.title, explanation=item.explanation)
                 for item in payload.recommendations
+            ),
+            consequences=tuple(
+                AnalysisBlock(title=item.title, explanation=item.explanation)
+                for item in payload.consequences
             ),
             follow_up_question=payload.follow_up_question,
         )

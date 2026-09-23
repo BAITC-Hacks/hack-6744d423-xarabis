@@ -29,6 +29,10 @@ def report_to_payload(report: ConsultantReport) -> dict[str, Any]:
             {"title": item.title, "explanation": item.explanation}
             for item in report.recommendations
         ],
+        "consequences": [
+            {"title": item.title, "explanation": item.explanation}
+            for item in report.consequences
+        ],
         "follow_up_question": report.follow_up_question,
     }
 
@@ -44,6 +48,7 @@ def payload_to_report(payload: dict[str, Any]) -> ConsultantReport:
         answer=payload["answer"],
         strengths=blocks("strengths"),
         risks=blocks("risks"),
+        consequences=blocks("consequences") if "consequences" in payload else (),
         recommendations=blocks("recommendations"),
         follow_up_question=payload["follow_up_question"],
     )

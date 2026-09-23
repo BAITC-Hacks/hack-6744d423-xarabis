@@ -39,6 +39,7 @@ def _to_report_response(report: ConsultantReport) -> ConsultantReportResponse:
         answer=report.answer,
         strengths=blocks(report.strengths),
         risks=blocks(report.risks),
+        consequences=blocks(report.consequences),
         recommendations=blocks(report.recommendations),
         follow_up_question=report.follow_up_question,
     )

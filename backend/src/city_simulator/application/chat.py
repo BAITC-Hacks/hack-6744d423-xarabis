@@ -18,6 +18,7 @@ def report_to_history(report: ConsultantReport) -> str:
     for heading, blocks in (
         ("Сильные стороны", report.strengths),
         ("Риски", report.risks),
+        ("Последствия", report.consequences),
         ("Рекомендации", report.recommendations),
     ):
         if blocks:

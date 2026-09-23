@@ -17,6 +17,7 @@ class ConsultantReport:
     answer: str
     strengths: tuple[AnalysisBlock, ...]
     risks: tuple[AnalysisBlock, ...]
+    consequences: tuple[AnalysisBlock, ...]
     recommendations: tuple[AnalysisBlock, ...]
     follow_up_question: str | None
 

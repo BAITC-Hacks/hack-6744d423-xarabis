@@ -61,7 +61,6 @@ export default defineConfig(({mode}) => {
   const env = {...loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), ''), ...process.env};
   const proxy = {
     '/api/v1': {target: env.PYTHON_API_URL ?? 'http://127.0.0.1:8000', changeOrigin: true},
-    '/api/ai': {target: env.AI_API_URL ?? 'http://127.0.0.1:8001', changeOrigin: true, rewrite: (path: string) => path.replace(/^\/api\/ai/, '')},
   };
   return {
   plugins: [react(), unityGzipAssets()],

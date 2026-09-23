@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -7,6 +8,7 @@ from city_simulator.domain.chat import AnalysisBlock, ConsultantReport, Consulta
 from city_simulator.domain.chat_ports import ConsultantGateway
 from city_simulator.domain.exceptions import ConsultantServiceError
 from city_simulator.infrastructure.database import Base, get_db_session
+from city_simulator.infrastructure.models import ChatMessageModel
 from city_simulator.main import app
 from city_simulator.presentation.dependencies import get_consultant_gateway
 
@@ -29,6 +31,7 @@ class StubConsultantGateway(ConsultantGateway):
             answer="Проверенный ответ консультанта.",
             strengths=(AnalysisBlock("Сильная сторона", "Пояснение"),),
             risks=(),
+            consequences=(AnalysisBlock("Последствие", "Транспорт улучшится"),),
             recommendations=(AnalysisBlock("Рекомендация", "Следующий шаг"),),
             follow_up_question="Продолжить анализ?",
         )
@@ -70,6 +73,9 @@ def test_chat_uses_trusted_scenario_context_and_persists_history(chat_client) ->
     )
     assert first.status_code == 200
     assert first.json()["answer"] == "Проверенный ответ консультанта."
+    assert first.json()["consequences"] == [
+        {"title": "Последствие", "explanation": "Транспорт улучшится"},
+    ]
     assert gateway.requests[0].message == "Что улучшить в плане?"
     assert gateway.requests[0].history == ()
     assert gateway.requests[0].selected_measures == ()
@@ -91,6 +97,7 @@ def test_chat_uses_trusted_scenario_context_and_persists_history(chat_client) ->
     assert second.status_code == 200
     second_request = gateway.requests[1]
     assert len(second_request.history) == 2
+    assert "Последствия:\nПоследствие: Транспорт улучшится" in second_request.history[1].content
     assert [item.role.value for item in second_request.history] == ["user", "assistant"]
     assert len(second_request.selected_measures) == 5
     assert second_request.budget_remaining == 5
@@ -142,3 +149,32 @@ def test_chat_rejects_blank_message(chat_client) -> None:
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_chat_history_reads_legacy_report_without_inventing_consequences(chat_client) -> None:
+    client, _gateway = chat_client
+    scenario_id = client.post("/api/v1/scenarios").json()["id"]
+    response = client.post(
+        f"/api/v1/scenarios/{scenario_id}/chat/messages", json={"message": "Анализ"},
+    )
+    assert response.status_code == 200
+
+    async for session in app.dependency_overrides[get_db_session]():
+        stored = await session.scalar(
+            select(ChatMessageModel).where(ChatMessageModel.role == "assistant")
+        )
+        assert stored.report["consequences"] == [
+            {"title": "Последствие", "explanation": "Транспорт улучшится"},
+        ]
+        stored.report = {
+            key: value for key, value in stored.report.items() if key != "consequences"
+        }
+        await session.commit()
+
+    history = client.get(f"/api/v1/scenarios/{scenario_id}/chat/messages")
+    assert history.status_code == 200
+    report = history.json()[1]["report"]
+    assert report["consequences"] == []
+    assert report["answer"] == "Проверенный ответ консультанта."
+    assert report["strengths"] == [{"title": "Сильная сторона", "explanation": "Пояснение"}]

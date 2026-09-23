@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readReportStream } from '../src/reportStream.ts';
 
-const report = {answer:'Привет 🌿', strengths:[], risks:[], recommendations:[], follow_up_question:null};
+const report = {answer:'Привет 🌿', strengths:[], risks:[], consequences:[{title:'Последствие',explanation:'Описание по расчёту'}], recommendations:[], follow_up_question:null};
 function response(text, size = 1) {
   const bytes = new TextEncoder().encode(text);
   return new Response(new ReadableStream({start(controller) {
@@ -23,4 +23,8 @@ test('server stream error reaches the caller', async () => {
 });
 test('malformed complete report is rejected', async () => {
   await assert.rejects(readReportStream(response('event: complete\ndata: {"answer":"ok"}\n\n'),()=>{}), /Некорректный/);
+});
+test('complete report must explicitly contain consequences', async () => {
+  const {consequences,...legacy}=report;
+  await assert.rejects(readReportStream(response('event: complete\ndata: '+JSON.stringify(legacy)+'\n\n'),()=>{}), /Некорректный/);
 });

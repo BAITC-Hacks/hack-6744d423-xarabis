@@ -16,16 +16,16 @@ from city_simulator.domain.exceptions import (
     SimulationResultNotFoundError,
 )
 from city_simulator.infrastructure.database import dispose_engine
-from city_simulator.presentation.dependencies import get_repository
-from city_simulator.presentation.district_sandbox_routes import router as district_sandbox_router
 from city_simulator.presentation.chat_routes import router as chat_router
 from city_simulator.presentation.dependencies import close_consultant_gateway, get_repository
+from city_simulator.presentation.district_sandbox_routes import router as district_sandbox_router
 from city_simulator.presentation.middleware import (
     REQUEST_ID_HEADER,
     ChatRateLimitMiddleware,
     RequestContextMiddleware,
 )
 from city_simulator.presentation.routes import router
+from city_simulator.presentation.sandbox_chat_routes import router as sandbox_chat_router
 from city_simulator.presentation.sandbox_routes import router as sandbox_router
 from city_simulator.presentation.scenario_routes import router as scenario_router
 
@@ -194,6 +194,7 @@ def create_app() -> FastAPI:
     application.include_router(sandbox_router, prefix=settings.api_v1_prefix)
     application.include_router(district_sandbox_router, prefix=settings.api_v1_prefix)
     application.include_router(chat_router, prefix=settings.api_v1_prefix)
+    application.include_router(sandbox_chat_router, prefix=settings.api_v1_prefix)
     return application
 
 

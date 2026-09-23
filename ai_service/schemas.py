@@ -188,6 +188,7 @@ class ChatResponse(ContractModel):
     answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=6000)]
     strengths: Annotated[list[AnalysisBlock], Field(max_length=5)]
     risks: Annotated[list[AnalysisBlock], Field(max_length=5)]
+    consequences: Annotated[list[AnalysisBlock], Field(max_length=5)]
     recommendations: Annotated[list[AnalysisBlock], Field(max_length=5)]
     follow_up_question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)] | None
 

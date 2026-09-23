@@ -117,3 +117,61 @@ def test_missing_scenario_returns_not_found(persistence_client: TestClient) -> N
     response = persistence_client.get("/api/v1/scenarios/00000000-0000-0000-0000-000000000001")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "scenario_not_found"
+
+
+def test_frontend_management_lifecycle(persistence_client: TestClient) -> None:
+    first = persistence_client.post("/api/v1/scenarios").json()
+    second = persistence_client.post("/api/v1/scenarios").json()
+
+    page = persistence_client.get("/api/v1/scenarios", params={"limit": 1, "offset": 0})
+    assert page.status_code == 200
+    assert page.json()["total"] == 2
+    assert page.json()["limit"] == 1
+    assert page.json()["offset"] == 0
+    assert len(page.json()["items"]) == 1
+
+    updated = persistence_client.put(
+        f"/api/v1/scenarios/{first['id']}/decisions",
+        json={"expected_version": 1, "decisions": EXAMPLE_DECISIONS},
+    ).json()
+    persistence_client.post(
+        f"/api/v1/scenarios/{first['id']}/calculate",
+        json={"expected_version": updated["version"]},
+    )
+
+    reset = persistence_client.post(
+        f"/api/v1/scenarios/{first['id']}/reset",
+        json={"expected_version": updated["version"]},
+    )
+    assert reset.status_code == 200
+    assert reset.json()["version"] == 3
+    assert reset.json()["status"] == "draft"
+    assert reset.json()["decisions"] == []
+    assert (
+        persistence_client.get(f"/api/v1/scenarios/{first['id']}/result").status_code
+        == 404
+    )
+    assert len(
+        persistence_client.get(f"/api/v1/scenarios/{first['id']}/results").json()
+    ) == 1
+
+    stale_delete = persistence_client.delete(
+        f"/api/v1/scenarios/{first['id']}",
+        params={"expected_version": 2},
+    )
+    assert stale_delete.status_code == 409
+    assert stale_delete.json()["error"]["details"] == {
+        "scenario_id": first["id"],
+        "expected_version": 2,
+        "current_version": 3,
+    }
+
+    deleted = persistence_client.delete(
+        f"/api/v1/scenarios/{first['id']}",
+        params={"expected_version": 3},
+    )
+    assert deleted.status_code == 204
+    assert persistence_client.get(f"/api/v1/scenarios/{first['id']}").status_code == 404
+    remaining = persistence_client.get("/api/v1/scenarios").json()
+    assert remaining["total"] == 1
+    assert remaining["items"][0]["id"] == second["id"]

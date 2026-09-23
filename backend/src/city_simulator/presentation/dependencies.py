@@ -7,10 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from city_simulator.application.scenarios import (
     CalculateStoredScenarioUseCase,
     CreateScenarioUseCase,
+    DeleteScenarioUseCase,
     GetCurrentScenarioResultUseCase,
     GetScenarioUseCase,
     ListScenarioResultsUseCase,
+    ListScenariosUseCase,
     ReplaceScenarioDecisionsUseCase,
+    ResetScenarioUseCase,
 )
 from city_simulator.application.use_cases import (
     GetCatalogUseCase,
@@ -69,6 +72,12 @@ def get_get_scenario_use_case(
     return GetScenarioUseCase(scenarios)
 
 
+def get_list_scenarios_use_case(
+    scenarios: Annotated[SqlAlchemyScenarioRepository, Depends(get_scenario_repository)],
+) -> ListScenariosUseCase:
+    return ListScenariosUseCase(scenarios)
+
+
 def get_replace_decisions_use_case(
     scenarios: Annotated[SqlAlchemyScenarioRepository, Depends(get_scenario_repository)],
 ) -> ReplaceScenarioDecisionsUseCase:
@@ -77,6 +86,18 @@ def get_replace_decisions_use_case(
         get_repository(),
         DraftScenarioValidator(),
     )
+
+
+def get_reset_scenario_use_case(
+    scenarios: Annotated[SqlAlchemyScenarioRepository, Depends(get_scenario_repository)],
+) -> ResetScenarioUseCase:
+    return ResetScenarioUseCase(scenarios)
+
+
+def get_delete_scenario_use_case(
+    scenarios: Annotated[SqlAlchemyScenarioRepository, Depends(get_scenario_repository)],
+) -> DeleteScenarioUseCase:
+    return DeleteScenarioUseCase(scenarios)
 
 
 def get_calculate_stored_scenario_use_case(

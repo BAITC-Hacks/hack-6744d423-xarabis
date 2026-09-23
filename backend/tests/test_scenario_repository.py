@@ -81,6 +81,10 @@ async def test_repository_preserves_result_history_and_invalidates_current(
         history = await repository.list_results(scenario.id)
         assert [item.scenario_version for item in history] == [2]
 
+        await repository.delete(scenario.id, expected_version=3)
+        assert await repository.get(scenario.id) is None
+        assert await repository.list_results(scenario.id) == ()
+
 
 @pytest.mark.asyncio
 async def test_repository_detects_stale_version(session_factory, dataset) -> None:

@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -42,6 +42,22 @@ class SqlAlchemyScenarioRepository(ScenarioRepository):
         model = await self._session.scalar(statement)
         return self._to_scenario(model) if model else None
 
+    async def list(self, *, limit: int, offset: int) -> Sequence[Scenario]:
+        statement = (
+            select(ScenarioModel)
+            .options(selectinload(ScenarioModel.decisions))
+            .order_by(ScenarioModel.updated_at.desc(), ScenarioModel.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        models = (await self._session.scalars(statement)).all()
+        return tuple(self._to_scenario(model) for model in models)
+
+    async def count(self) -> int:
+        return int(
+            await self._session.scalar(select(func.count()).select_from(ScenarioModel)) or 0
+        )
+
     async def replace_decisions(
         self,
         scenario_id: UUID,
@@ -63,7 +79,10 @@ class SqlAlchemyScenarioRepository(ScenarioRepository):
         result = await self._session.execute(statement)
         if result.rowcount != 1:
             await self._session.rollback()
-            await self._raise_missing_or_conflict(scenario_id)
+            await self._raise_missing_or_conflict(
+                scenario_id,
+                expected_version=expected_version,
+            )
 
         await self._session.execute(
             delete(ScenarioDecisionModel).where(ScenarioDecisionModel.scenario_id == scenario_id)
@@ -99,7 +118,10 @@ class SqlAlchemyScenarioRepository(ScenarioRepository):
         update_result = await self._session.execute(status_update)
         if update_result.rowcount != 1:
             await self._session.rollback()
-            await self._raise_missing_or_conflict(scenario_id)
+            await self._raise_missing_or_conflict(
+                scenario_id,
+                expected_version=expected_version,
+            )
 
         existing = await self._find_result(scenario_id, expected_version)
         if existing is not None:
@@ -151,19 +173,55 @@ class SqlAlchemyScenarioRepository(ScenarioRepository):
         models = (await self._session.scalars(statement)).all()
         return tuple(self._to_stored_result(model) for model in models)
 
+    async def delete(self, scenario_id: UUID, *, expected_version: int) -> None:
+        statement = delete(ScenarioModel).where(
+            ScenarioModel.id == scenario_id,
+            ScenarioModel.version == expected_version,
+        )
+        result = await self._session.execute(statement)
+        if result.rowcount != 1:
+            await self._session.rollback()
+            await self._raise_missing_or_conflict(
+                scenario_id,
+                expected_version=expected_version,
+            )
+        # PostgreSQL applies the FK cascades. Explicit child cleanup keeps the
+        # repository correct for the local SQLite fallback where FK enforcement
+        # may be disabled by the driver.
+        await self._session.execute(
+            delete(ScenarioDecisionModel).where(
+                ScenarioDecisionModel.scenario_id == scenario_id
+            )
+        )
+        await self._session.execute(
+            delete(SimulationResultModel).where(
+                SimulationResultModel.scenario_id == scenario_id
+            )
+        )
+        await self._session.commit()
+
     async def _get_required(self, scenario_id: UUID) -> Scenario:
         scenario = await self.get(scenario_id)
         if scenario is None:
             raise ScenarioNotFoundError(scenario_id)
         return scenario
 
-    async def _raise_missing_or_conflict(self, scenario_id: UUID) -> None:
-        exists = await self._session.scalar(
-            select(ScenarioModel.id).where(ScenarioModel.id == scenario_id)
+    async def _raise_missing_or_conflict(
+        self,
+        scenario_id: UUID,
+        *,
+        expected_version: int,
+    ) -> None:
+        current_version = await self._session.scalar(
+            select(ScenarioModel.version).where(ScenarioModel.id == scenario_id)
         )
-        if exists is None:
+        if current_version is None:
             raise ScenarioNotFoundError(scenario_id)
-        raise ScenarioVersionConflictError(scenario_id)
+        raise ScenarioVersionConflictError(
+            scenario_id,
+            expected_version=expected_version,
+            current_version=current_version,
+        )
 
     async def _find_result(
         self,

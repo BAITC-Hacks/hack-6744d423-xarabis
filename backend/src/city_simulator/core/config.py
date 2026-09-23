@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_debug: bool = False
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite+aiosqlite:///./xarabis.db"
+    cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @field_validator("database_url")
     @classmethod
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
         if value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         return value
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache

@@ -21,6 +21,18 @@ def test_health() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_cors_preflight_allows_configured_frontend() -> None:
+    response = client.options(
+        "/api/v1/catalog",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
 def test_catalog_endpoints() -> None:
     metadata = client.get("/api/v1/catalog").json()
     assert metadata["dataset_version"] == "1.0"
@@ -70,7 +82,15 @@ def test_invalid_scenario_returns_rule_details() -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "scenario_validation_error"
+    error = response.json()["error"]
+    assert error["code"] == "scenario_validation_error"
+    assert error["details"] == [
+        {
+            "code": "decision_count_mismatch",
+            "message": "Нужно выбрать ровно 5 мероприятий",
+            "context": {"required": 5, "actual": 1},
+        }
+    ]
 
 
 def test_unknown_request_fields_are_rejected() -> None:
@@ -80,3 +100,13 @@ def test_unknown_request_fields_are_rejected() -> None:
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_request"
+
+
+def test_openapi_describes_frontend_integration_contract() -> None:
+    schema = client.get("/openapi.json").json()
+    assert schema["info"]["version"] == "0.4.0"
+    paths = schema["paths"]
+    assert "get" in paths["/api/v1/scenarios"]
+    assert "post" in paths["/api/v1/scenarios/{scenario_id}/reset"]
+    assert "delete" in paths["/api/v1/scenarios/{scenario_id}"]
+    assert "409" in paths["/api/v1/scenarios/{scenario_id}/decisions"]["put"]["responses"]

@@ -12,49 +12,106 @@ from city_simulator.domain.entities import (
     SimulationDataset,
 )
 from city_simulator.domain.enums import ConflictScope, EffectKind, IndicatorCode, MeasureScope
-from city_simulator.domain.exceptions import ScenarioValidationError
+from city_simulator.domain.exceptions import ScenarioValidationError, ValidationIssue
 
 
 class DraftScenarioValidator:
     """Validates a partial selection while a user is building a scenario."""
 
     def validate(self, decisions: Sequence[Decision], dataset: SimulationDataset) -> None:
-        errors: list[str] = []
+        issues: list[ValidationIssue] = []
         rules = dataset.rules
         normalized_ids = [decision.measure_id.upper() for decision in decisions]
         measure_by_id = {measure.id: measure for measure in dataset.measures}
         district_ids = {district.id for district in dataset.districts}
 
         if len(decisions) > rules.required_decisions:
-            errors.append(f"Можно выбрать не более {rules.required_decisions} мероприятий")
+            issues.append(
+                ValidationIssue(
+                    code="too_many_decisions",
+                    message=f"Можно выбрать не более {rules.required_decisions} мероприятий",
+                    context={"maximum": rules.required_decisions, "actual": len(decisions)},
+                )
+            )
         if len(normalized_ids) != len(set(normalized_ids)):
-            errors.append("Одно мероприятие нельзя выбирать повторно")
+            duplicates = sorted(
+                measure_id
+                for measure_id, count in Counter(normalized_ids).items()
+                if count > 1
+            )
+            issues.append(
+                ValidationIssue(
+                    code="duplicate_measure",
+                    message="Одно мероприятие нельзя выбирать повторно",
+                    context={"measure_ids": duplicates},
+                )
+            )
 
         selected_measures = []
         decision_by_measure: dict[str, Decision] = {}
         for decision, measure_id in zip(decisions, normalized_ids, strict=True):
             measure = measure_by_id.get(measure_id)
             if measure is None:
-                errors.append(f"Неизвестное мероприятие: {decision.measure_id}")
+                issues.append(
+                    ValidationIssue(
+                        code="unknown_measure",
+                        message=f"Неизвестное мероприятие: {decision.measure_id}",
+                        context={"measure_id": decision.measure_id},
+                    )
+                )
                 continue
             selected_measures.append(measure)
             decision_by_measure[measure_id] = decision
             if measure.scope is MeasureScope.DISTRICT:
                 if decision.district_id not in district_ids:
-                    errors.append(f"Для {measure.id} нужно указать существующий район")
+                    issues.append(
+                        ValidationIssue(
+                            code="district_required",
+                            message=f"Для {measure.id} нужно указать существующий район",
+                            context={
+                                "measure_id": measure.id,
+                                "district_id": decision.district_id,
+                            },
+                        )
+                    )
             elif decision.district_id is not None:
-                errors.append(f"Для городской меры {measure.id} район указывать нельзя")
+                issues.append(
+                    ValidationIssue(
+                        code="district_not_allowed",
+                        message=f"Для городской меры {measure.id} район указывать нельзя",
+                        context={
+                            "measure_id": measure.id,
+                            "district_id": decision.district_id,
+                        },
+                    )
+                )
 
         total_cost = sum(measure.cost for measure in selected_measures)
         if total_cost > rules.budget:
-            errors.append(f"Бюджет превышен: {total_cost} из {rules.budget}")
+            issues.append(
+                ValidationIssue(
+                    code="budget_exceeded",
+                    message=f"Бюджет превышен: {total_cost} из {rules.budget}",
+                    context={"total_cost": total_cost, "budget": rules.budget},
+                )
+            )
 
         direction_counts = Counter(measure.direction for measure in selected_measures)
         for direction, count in direction_counts.items():
             if count > rules.max_measures_per_direction:
-                errors.append(
-                    f"В направлении '{direction.value}' выбрано больше "
-                    f"{rules.max_measures_per_direction} мероприятий"
+                issues.append(
+                    ValidationIssue(
+                        code="direction_limit_exceeded",
+                        message=(
+                            f"В направлении '{direction.value}' выбрано больше "
+                            f"{rules.max_measures_per_direction} мероприятий"
+                        ),
+                        context={
+                            "direction": direction.value,
+                            "maximum": rules.max_measures_per_direction,
+                            "actual": count,
+                        },
+                    )
                 )
 
         selected_ids = set(decision_by_measure)
@@ -63,12 +120,31 @@ class DraftScenarioValidator:
             if not {first, second} <= selected_ids:
                 continue
             if conflict.scope is ConflictScope.GLOBAL:
-                errors.append(f"{first} и {second} несовместимы")
+                issues.append(
+                    ValidationIssue(
+                        code="incompatible_measures",
+                        message=f"{first} и {second} несовместимы",
+                        context={
+                            "measure_ids": [first, second],
+                            "scope": conflict.scope.value,
+                        },
+                    )
+                )
             elif decision_by_measure[first].district_id == decision_by_measure[second].district_id:
-                errors.append(f"{first} и {second} нельзя применять в одном районе")
+                issues.append(
+                    ValidationIssue(
+                        code="incompatible_measures",
+                        message=f"{first} и {second} нельзя применять в одном районе",
+                        context={
+                            "measure_ids": [first, second],
+                            "scope": conflict.scope.value,
+                            "district_id": decision_by_measure[first].district_id,
+                        },
+                    )
+                )
 
-        if errors:
-            raise ScenarioValidationError(errors)
+        if issues:
+            raise ScenarioValidationError(issues)
 
 
 class CalculationScenarioValidator:
@@ -78,15 +154,25 @@ class CalculationScenarioValidator:
         self._draft_validator = draft_validator or DraftScenarioValidator()
 
     def validate(self, decisions: Sequence[Decision], dataset: SimulationDataset) -> None:
-        errors: list[str] = []
+        issues: list[ValidationIssue] = []
         try:
             self._draft_validator.validate(decisions, dataset)
         except ScenarioValidationError as exc:
-            errors.extend(exc.errors)
+            issues.extend(exc.issues)
         if len(decisions) != dataset.rules.required_decisions:
-            errors.insert(0, f"Нужно выбрать ровно {dataset.rules.required_decisions} мероприятий")
-        if errors:
-            raise ScenarioValidationError(errors)
+            issues.insert(
+                0,
+                ValidationIssue(
+                    code="decision_count_mismatch",
+                    message=f"Нужно выбрать ровно {dataset.rules.required_decisions} мероприятий",
+                    context={
+                        "required": dataset.rules.required_decisions,
+                        "actual": len(decisions),
+                    },
+                ),
+            )
+        if issues:
+            raise ScenarioValidationError(issues)
 
 
 class ScoreCalculator:

@@ -1,6 +1,6 @@
 # Интеграция frontend с Akim City Simulator API
 
-Статус документа: актуально для backend `0.3.0`.
+Статус документа: актуально для backend `0.4.0`.
 
 Этот документ является рабочим контрактом для frontend. Для подключения основной
 симуляции не требуется читать исходный код backend или самостоятельно воспроизводить
@@ -21,14 +21,12 @@
 
 Пока отсутствуют:
 
-- список сценариев пользователя;
 - авторизация и пользователи;
-- удаление и завершение сценария;
+- завершение сценария;
 - маршруты основного backend для чата с AI-консультантом;
-- CORS middleware.
 
-Это не мешает собрать основной экран симуляции. Идентификатор текущего сценария
-нужно временно хранить в `localStorage`.
+Это не мешает собрать основной экран симуляции. API уже поддерживает пагинированный
+список, сброс и удаление сценариев.
 
 ## 2. Адреса и подключение
 
@@ -53,12 +51,14 @@ Health: http://127.0.0.1:8000/api/v1/health
 Readiness: http://127.0.0.1:8000/api/v1/ready
 ```
 
-### Важно: запросы из браузера
+### Запросы из браузера
 
-В версии `0.3.0` CORS не настроен. Frontend не должен обращаться напрямую с
-`http://localhost:5173` к `http://127.0.0.1:8000`: браузер может заблокировать запрос.
+Backend разрешает CORS для адресов из переменной `CORS_ALLOWED_ORIGINS`. По умолчанию
+разрешены `http://localhost:5173` и `http://127.0.0.1:5173`. Поэтому локально можно
+использовать `http://127.0.0.1:8000/api/v1` напрямую.
 
-В разработке направляйте `/api` через proxy frontend-сервера. Пример для Vite:
+Предпочтительный вариант — направлять `/api` через proxy frontend-сервера. Тогда
+конфигурация frontend одинакова в development и production. Пример для Vite:
 
 ```ts
 // vite.config.ts
@@ -84,8 +84,10 @@ export default defineConfig({
 const API_BASE_URL = "/api/v1";
 ```
 
-В production frontend и `/api` следует публиковать на одном origin через reverse
-proxy. Не зашивайте локальный адрес backend в компоненты.
+Если frontend запускается с другого origin, этот точный origin необходимо добавить в
+`CORS_ALLOWED_ORIGINS` backend через запятую. Wildcard `*` для production не
+использовать. В production frontend и `/api` лучше публиковать на одном origin через
+reverse proxy. Не зашивайте локальный адрес backend в компоненты.
 
 Все запросы и ответы используют `application/json`. Авторизация в текущей версии не
 требуется.
@@ -185,6 +187,13 @@ export interface Scenario {
   updated_at: ISODateTime;
 }
 
+export interface ScenarioPage {
+  items: Scenario[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CriticalIndicator {
   district_id: DistrictId;
   indicator_id: IndicatorId;
@@ -237,6 +246,12 @@ export interface ApiErrorBody {
     message: string;
     details?: unknown;
   };
+}
+
+export interface ValidationIssue {
+  code: string;
+  message: string;
+  context: Record<string, unknown>;
 }
 ```
 
@@ -334,6 +349,28 @@ Frontend может заранее блокировать очевидные о�
 
 Это основной flow для приложения.
 
+### Экран списка сценариев
+
+```http
+GET /api/v1/scenarios?limit=20&offset=0
+```
+
+Ответ `200`:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+`limit` допустим от 1 до 100, `offset` — от 0. Сценарии отсортированы от недавно
+обновлённых к старым. Для следующей страницы отправьте `offset + limit`. Отдельного
+поля `has_next` нет: следующая страница существует, пока `offset + items.length <
+total`.
+
 ### Шаг 1. Создать сценарий
 
 ```http
@@ -356,8 +393,9 @@ POST /api/v1/scenarios
 }
 ```
 
-Сохраните `id` в состоянии приложения и в `localStorage`, например под ключом
-`akim.currentScenarioId`.
+Сохраните `id` в состоянии приложения. Для быстрого возврата можно также хранить его
+в `localStorage`, например под ключом `akim.currentScenarioId`, но список сценариев
+нужно получать из backend.
 
 ### Шаг 2. Восстановить сценарий после обновления страницы
 
@@ -366,7 +404,7 @@ GET /api/v1/scenarios/{scenario_id}
 ```
 
 Если ответ `200`, замените локальное состояние объектом из ответа. Если `404` с
-`scenario_not_found`, удалите старый id из `localStorage` и создайте новый сценарий.
+`scenario_not_found`, удалите старый id из `localStorage` и вернитесь к списку.
 
 Порядок элементов `decisions` не является частью контракта. Связывайте карточки по
 `measure_id`, а не по индексу массива.
@@ -526,6 +564,32 @@ GET /api/v1/scenarios/{scenario_id}/results
 Ответ — `StoredSimulationResult[]`. Новые версии идут первыми. Пагинации пока нет.
 История относится к одному сценарию.
 
+### Шаг 8. Сбросить сценарий
+
+```http
+POST /api/v1/scenarios/{scenario_id}/reset
+Content-Type: application/json
+
+{
+  "expected_version": 2
+}
+```
+
+Сброс удаляет все выбранные решения, увеличивает версию и возвращает сценарий со
+статусом `draft`. Старые результаты сохраняются в истории, но актуальный `/result`
+начинает возвращать `404 result_not_found`.
+
+### Шаг 9. Удалить сценарий
+
+```http
+DELETE /api/v1/scenarios/{scenario_id}?expected_version=3
+```
+
+Успех: `204 No Content`, тело отсутствует. Сценарий, решения и результаты удаляются.
+После успеха удалите id из `localStorage` и вернитесь к списку. При устаревшей версии
+backend возвращает `409 scenario_version_conflict`; автоматически повторять удаление
+с новой версией нельзя.
+
 ## 7. Быстрый расчёт без хранения
 
 Для прототипа или экрана предпросмотра можно использовать:
@@ -603,13 +667,30 @@ HTTP `422`:
     "code": "scenario_validation_error",
     "message": "Сценарий нарушает игровые правила",
     "details": [
-      "Нужно выбрать ровно 5 мероприятий"
+      {
+        "code": "decision_count_mismatch",
+        "message": "Нужно выбрать ровно 5 мероприятий",
+        "context": {"required": 5, "actual": 1}
+      }
     ]
   }
 }
 ```
 
-Покажите пользователю каждый элемент `details`. Не заменяйте их общим сообщением.
+`details` имеет тип `ValidationIssue[]`. Логику UI стройте по `details[].code`, а
+пользователю показывайте `details[].message`. Стабильные коды правил:
+
+| Код | Значение |
+| --- | --- |
+| `decision_count_mismatch` | Для расчёта выбрано не ровно требуемое количество |
+| `too_many_decisions` | В черновике слишком много решений |
+| `duplicate_measure` | Мероприятие выбрано повторно |
+| `unknown_measure` | Мероприятия нет в каталоге |
+| `district_required` | Для районной меры не указан существующий район |
+| `district_not_allowed` | Для городской меры передан район |
+| `budget_exceeded` | Превышен бюджет |
+| `direction_limit_exceeded` | Превышен лимит мер одного направления |
+| `incompatible_measures` | Выбрано несовместимое сочетание |
 
 ### Ошибка структуры запроса
 
@@ -623,8 +704,8 @@ API запрещает неизвестные поля в request body. Не о�
 
 ### Сценарий не найден
 
-HTTP `404`, код `scenario_not_found`. Удалите сохранённый id, создайте новый сценарий
-и сообщите, что прежний черновик недоступен.
+HTTP `404`, код `scenario_not_found`. `error.details.scenario_id` содержит id. Удалите
+сохранённый id, вернитесь к списку и сообщите, что прежний черновик недоступен.
 
 ### Актуальный результат отсутствует
 
@@ -634,6 +715,9 @@ HTTP `404`, код `result_not_found`. Это нормальное состоя�
 ### Конфликт версии
 
 HTTP `409`, код `scenario_version_conflict`.
+
+`error.details` содержит `scenario_id`, отправленную `expected_version` и актуальную
+`current_version`.
 
 Алгоритм обработки:
 
@@ -673,7 +757,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
 
-  const payload: unknown = await response.json();
+  const payload: unknown =
+    response.status === 204 ? undefined : await response.json();
   if (!response.ok) {
     const body = payload as ApiErrorBody;
     throw new ApiRequestError(
@@ -693,6 +778,9 @@ export const cityApi = {
 
   createScenario: () =>
     request<Scenario>("/scenarios", { method: "POST" }),
+
+  listScenarios: (limit = 20, offset = 0) =>
+    request<ScenarioPage>(`/scenarios?limit=${limit}&offset=${offset}`),
 
   getScenario: (id: UUID) => request<Scenario>(`/scenarios/${id}`),
 
@@ -727,6 +815,18 @@ export const cityApi = {
 
   getResults: (id: UUID) =>
     request<StoredSimulationResult[]>(`/scenarios/${id}/results`),
+
+  resetScenario: (id: UUID, expectedVersion: number) =>
+    request<Scenario>(`/scenarios/${id}/reset`, {
+      method: "POST",
+      body: JSON.stringify({ expected_version: expectedVersion }),
+    }),
+
+  deleteScenario: (id: UUID, expectedVersion: number) =>
+    request<void>(
+      `/scenarios/${id}?expected_version=${expectedVersion}`,
+      { method: "DELETE" },
+    ),
 };
 ```
 
@@ -826,27 +926,30 @@ export interface ConsultantClient {
 1. Настроить proxy `/api` на backend.
 2. Создать TypeScript-типы и общий API-клиент.
 3. Реализовать параллельную загрузку четырёх справочников.
-4. Сделать создание сценария и хранение его id в `localStorage`.
-5. Сделать восстановление сценария по id.
+4. Сделать пагинированный список, создание, открытие и удаление сценариев.
+5. Сделать восстановление последнего сценария по id из `localStorage` как shortcut.
 6. Реализовать каталог мероприятий и выбор района только для районных мер.
-7. Реализовать валидацию выбора, бюджет и отображение `details` ошибок.
+7. Реализовать валидацию выбора, бюджет и отображение структурированных ошибок.
 8. Реализовать полную замену решений с `expected_version`.
-9. Реализовать расчёт и экран результата.
-10. Реализовать сравнение районов и показателей до/после.
-11. Реализовать историю результатов.
-12. Сделать UI чата через `ConsultantClient` и mock, не вызывая AI напрямую.
-13. После появления маршрутов чата заменить только адаптер, не компоненты UI.
+9. Реализовать сброс сценария с подтверждением пользователя.
+10. Реализовать расчёт и экран результата.
+11. Реализовать сравнение районов и показателей до/после.
+12. Реализовать историю результатов.
+13. Сделать UI чата через `ConsultantClient` и mock, не вызывая AI напрямую.
+14. После появления маршрутов чата заменить только адаптер, не компоненты UI.
 
 ## 14. Критерии готовности frontend-интеграции
 
 Интеграция основной симуляции готова, если выполняются все проверки:
 
 - приложение загружается без захардкоженного каталога;
+- список сценариев поддерживает пагинацию;
 - после refresh восстанавливается текущий сценарий;
 - городская мера отправляется с `district_id: null`;
 - районная мера не сохраняется без района;
 - невозможно случайно отправить более пяти решений;
-- ошибки правил показываются из `error.details`;
+- ошибки правил обрабатываются по `error.details[].code`, а пользователю показывается
+  `error.details[].message`;
 - стоимость и остаток подтверждаются backend;
 - сохранения не отправляются параллельно;
 - `409` приводит к перезагрузке сценария, а не к бесконечному retry;
@@ -859,6 +962,7 @@ export interface ConsultantClient {
   состояние;
 - frontend не пересчитывает Score;
 - frontend не обращается к AI-сервису напрямую.
+- удаление и сброс требуют подтверждения и актуальной версии сценария;
 
 ## 15. Карта API
 
@@ -873,8 +977,11 @@ export interface ConsultantClient {
 | `POST` | `/api/v1/scenarios/validate` | Проверка неполного выбора |
 | `POST` | `/api/v1/scenarios/simulate` | Расчёт без сохранения |
 | `POST` | `/api/v1/scenarios` | Создание сценария |
+| `GET` | `/api/v1/scenarios?limit=20&offset=0` | Список сценариев |
 | `GET` | `/api/v1/scenarios/{id}` | Восстановление сценария |
 | `PUT` | `/api/v1/scenarios/{id}/decisions` | Полная замена выбора |
+| `POST` | `/api/v1/scenarios/{id}/reset` | Сброс решений |
+| `DELETE` | `/api/v1/scenarios/{id}?expected_version=N` | Удаление сценария |
 | `POST` | `/api/v1/scenarios/{id}/calculate` | Расчёт и сохранение |
 | `GET` | `/api/v1/scenarios/{id}/result` | Актуальный результат |
 | `GET` | `/api/v1/scenarios/{id}/results` | История результатов |

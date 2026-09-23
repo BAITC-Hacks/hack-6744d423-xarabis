@@ -1,4 +1,6 @@
+from collections import Counter
 from dataclasses import replace
+from itertools import combinations
 from types import MappingProxyType
 
 import pytest
@@ -10,8 +12,17 @@ from city_simulator.domain.services import CalculationScenarioValidator, ScoreCa
 
 def test_baseline_score_matches_dataset(dataset) -> None:
     result = ScoreCalculator().calculate((), dataset)
-    assert result.score_before == pytest.approx(52.56, abs=0.01)
-    assert result.score_after == pytest.approx(52.56, abs=0.01)
+    assert result.score_before == pytest.approx(52.55768)
+    assert result.score_after == pytest.approx(52.55768)
+    assert {item.district_id: item.score_before for item in result.districts} == pytest.approx(
+        {
+            "esil": 62.99,
+            "almaty": 57.06,
+            "saryarka": 54.65,
+            "baikonur": 56.63,
+            "nura": 49.18,
+        }
+    )
     assert len(result.critical_before) == 2
     assert result.critical_before == result.critical_after
 
@@ -22,8 +33,10 @@ def test_example_scenario_matches_document(dataset, example_decisions) -> None:
 
     assert result.total_cost == 95
     assert result.remaining_budget == 5
-    assert result.score_after == pytest.approx(56.54, abs=0.01)
-    assert result.score_delta == pytest.approx(3.98, abs=0.01)
+    assert result.score_after == pytest.approx(56.54307)
+    assert result.score_delta == pytest.approx(3.98539)
+    assert result.city_average == pytest.approx(58.0776)
+    assert result.weakest_district_score == pytest.approx(52.9625)
     assert result.critical_after == ()
     assert any(
         effect.kind is EffectKind.SYNERGY
@@ -116,3 +129,38 @@ def test_different_valid_decisions_change_score(dataset, example_decisions) -> N
         calculator.calculate(alternative, dataset).score_after
         != calculator.calculate(example_decisions, dataset).score_after
     )
+
+
+def test_documented_minimum_cost_valid_plan_costs_61(dataset) -> None:
+    decisions = (
+        Decision("M9", "nura"),
+        Decision("M11", "nura"),
+        Decision("M10", "nura"),
+        Decision("M12"),
+        Decision("M4", "saryarka"),
+    )
+    CalculationScenarioValidator().validate(decisions, dataset)
+    assert ScoreCalculator().calculate(decisions, dataset).total_cost == 61
+
+    candidate_costs = [
+        sum(measure.cost for measure in measures)
+        for measures in combinations(dataset.measures, dataset.rules.required_decisions)
+        if max(Counter(measure.direction for measure in measures).values())
+        <= dataset.rules.max_measures_per_direction
+        and not {"M1", "M3"} <= {measure.id for measure in measures}
+    ]
+    assert min(candidate_costs) == 61
+
+
+def test_values_equal_to_critical_threshold_are_not_critical(dataset) -> None:
+    nura = dataset.get_district("nura")
+    assert nura is not None
+    indicators = dict(nura.indicators)
+    indicators[IndicatorCode.S1] = dataset.rules.critical_threshold
+    indicators[IndicatorCode.S2] = dataset.rules.critical_threshold
+    modified_nura = replace(nura, indicators=MappingProxyType(indicators))
+    modified_dataset = replace(dataset, districts=(*dataset.districts[:-1], modified_nura))
+
+    result = ScoreCalculator().calculate((), modified_dataset)
+
+    assert result.critical_before == ()

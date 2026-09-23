@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from city_simulator.core.config import get_settings
+from city_simulator.core.logging import configure_logging
 from city_simulator.domain.exceptions import (
     ConsultantServiceError,
     ScenarioNotFoundError,
@@ -17,6 +18,11 @@ from city_simulator.domain.exceptions import (
 from city_simulator.infrastructure.database import dispose_engine
 from city_simulator.presentation.chat_routes import router as chat_router
 from city_simulator.presentation.dependencies import close_consultant_gateway, get_repository
+from city_simulator.presentation.middleware import (
+    REQUEST_ID_HEADER,
+    ChatRateLimitMiddleware,
+    RequestContextMiddleware,
+)
 from city_simulator.presentation.routes import router
 from city_simulator.presentation.scenario_routes import router as scenario_router
 
@@ -32,14 +38,26 @@ async def lifespan(_application: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings.log_level)
     # Fail fast if the bundled dataset is incomplete or internally inconsistent.
     get_repository().get_dataset()
     application = FastAPI(
         title=settings.app_name,
-        version="0.5.0",
+        version="0.6.0",
         description="API симулятора управления районами Астаны.",
         debug=settings.app_debug,
         lifespan=lifespan,
+    )
+    # Starlette executes the last registered middleware first. Keep CORS outermost
+    # so browser clients can inspect errors produced by the request guards too.
+    application.add_middleware(
+        ChatRateLimitMiddleware,
+        requests_per_minute=settings.ai_chat_requests_per_minute,
+    )
+    application.add_middleware(
+        RequestContextMiddleware,
+        max_request_body_bytes=settings.max_request_body_bytes,
+        debug=settings.app_debug,
     )
     if settings.allowed_origins:
         application.add_middleware(
@@ -48,6 +66,7 @@ def create_app() -> FastAPI:
             allow_credentials=False,
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=[REQUEST_ID_HEADER, "Retry-After"],
         )
 
     @application.exception_handler(ScenarioValidationError)

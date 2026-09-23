@@ -32,7 +32,7 @@ class ScenarioPageResponse(StrictModel):
 
 class ReplaceDecisionsRequest(StrictModel):
     expected_version: Annotated[int, Field(ge=1)]
-    decisions: Annotated[list[DecisionRequest], Field(max_length=5)]
+    decisions: list[DecisionRequest]
 
 
 class CalculateScenarioRequest(StrictModel):

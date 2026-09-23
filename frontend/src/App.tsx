@@ -38,7 +38,7 @@ const format = (value: number | null | undefined) =>
 const delta = (value: number) => `${value > 0 ? "+" : ""}${format(value)}`;
 const LAYERS = [
   { id: "projects", label: "Проекты плана" },
-  { id: "score", label: "Общий индекс" },
+  { id: "score", label: "Оценка района" },
   ...METRICS.map((id) => ({ id, label: METRIC_META[id].name })),
 ];
 type Page = "city" | "results" | "scenarios";
